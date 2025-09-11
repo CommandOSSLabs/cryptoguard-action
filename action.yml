@@ -1,0 +1,37 @@
+name: 'CryptoGuard Action'
+description: 'V1.0 deployment action with GitHub OIDC, Sigstore attestation, and blockchain verification'
+author: 'CryptoGuard'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  domain:
+    description: 'Domain name for deployment verification'
+    required: true
+  build-dir:
+    description: 'Directory containing built application files'  
+    required: true
+    default: './dist'
+  network:
+    description: 'Sui/Walrus network (testnet/mainnet)'
+    required: false
+    default: 'testnet'
+  github-token:
+    description: 'GitHub token for API access'
+    required: false
+    default: '${{ github.token }}'
+
+outputs:
+  success:
+    description: 'Whether deployment completed successfully'
+  github_attestation:
+    description: 'GitHub OIDC attestation hash for verification'
+  registry_version:
+    description: 'New version number in Sui registry'
+  provenance_blob_id:
+    description: 'Walrus blob ID for SLSA provenance'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

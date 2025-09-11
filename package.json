@@ -1,0 +1,30 @@
+{
+  "name": "cryptoguard-action",
+  "version": "0.1.0",
+  "description": "GitHub Action for cryptographically verified deployment with SLSA provenance",
+  "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CommandOSSLabs/cryptoguard-action.git"
+  },
+  "keywords": [
+    "github-action",
+    "sigstore",
+    "cosign",
+    "slsa",
+    "attestation",
+    "cryptoguard",
+    "deployment",
+    "security",
+    "walrus",
+    "sui",
+    "blockchain",
+    "verification"
+  ],
+  "author": "CommandOSS Labs",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/CommandOSSLabs/cryptoguard-action/issues"
+  },
+  "homepage": "https://github.com/CommandOSSLabs/cryptoguard-action#readme"
+}
