@@ -10,7 +10,7 @@ exports.modules = {
 /* harmony export */   sha512: () => (/* binding */ sha512)
 /* harmony export */ });
 /* unused harmony exports SHA512, SHA384, sha384, SHA512_224, sha512_224, SHA512_256, sha512_256 */
-/* harmony import */ var _sha2_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(11547);
+/* harmony import */ var _sha2_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(4860);
 /**
  * SHA2-512 a.k.a. sha512 and sha384. It is slower than sha256 in js because u64 operations are slow.
  *

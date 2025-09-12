@@ -10,7 +10,7 @@ exports.modules = {
 /* harmony export */   sha256: () => (/* binding */ sha256)
 /* harmony export */ });
 /* unused harmony exports SHA256, SHA224, sha224 */
-/* harmony import */ var _sha2_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(11547);
+/* harmony import */ var _sha2_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(4860);
 /**
  * SHA2-256 a.k.a. sha256. In JS, it is the fastest hash, even faster than Blake3.
  *
