@@ -1,6 +1,6 @@
 {
   "name": "cryptoguard-action",
-  "version": "0.2.0",
+  "version": "0.1.1",
   "description": "GitHub Action for cryptographically verified deployment with multi-format key support and SLSA provenance",
   "main": "dist/index.js",
   "repository": {
