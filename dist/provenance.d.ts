@@ -85,6 +85,7 @@ export declare class SLSAProvenanceValidator {
     private updateSeverity;
     private readonly requiredFields;
     private readonly validTypes;
+    private readonly validPredicateTypes;
     /**
      * Validate SLSA provenance with comprehensive checks
      */
@@ -134,9 +135,53 @@ export interface SLSASubject {
     name: string;
     digest: {
         sha256: string;
+        gitCommit?: string;
     };
 }
+export interface SLSAResourceDescriptor {
+    uri: string;
+    digest: {
+        sha256?: string;
+        sha1?: string;
+        gitCommit?: string;
+    };
+    name?: string;
+    downloadLocation?: string;
+    mediaType?: string;
+    annotations?: Record<string, any>;
+    content?: any;
+}
 export interface SLSABuilder {
+    id: string;
+    builderDependencies?: SLSAResourceDescriptor[];
+    version?: Record<string, string>;
+}
+export interface SLSABuildDefinition {
+    buildType: string;
+    externalParameters: Record<string, any>;
+    internalParameters?: Record<string, any>;
+    resolvedDependencies?: SLSAResourceDescriptor[];
+}
+export interface SLSARunDetails {
+    builder: SLSABuilder;
+    metadata?: {
+        invocationId?: string;
+        startedOn?: string;
+        finishedOn?: string;
+    };
+    byproducts?: SLSAResourceDescriptor[];
+}
+export interface SLSAPredicateV11 {
+    buildDefinition: SLSABuildDefinition;
+    runDetails: SLSARunDetails;
+}
+export interface SLSAProvenanceV11 {
+    _type: string;
+    predicateType: string;
+    subject: SLSASubject[];
+    predicate: SLSAPredicateV11;
+}
+export interface SLSABuilder_Legacy {
     id: string;
 }
 export interface SLSAInvocation {
@@ -171,7 +216,7 @@ export interface SLSAMaterial {
     };
 }
 export interface SLSAPredicate {
-    builder: SLSABuilder;
+    builder: SLSABuilder_Legacy;
     buildType: string;
     invocation: SLSAInvocation;
     metadata: SLSAMetadata;
@@ -188,6 +233,11 @@ export interface SLSAProvenance {
  * Enhanced version using GitHubContextExtractor for robust context handling
  */
 export declare function createSLSAProvenance(filesManifest: FileManifest, githubContext: Context): SLSAProvenance;
+/**
+ * Create SLSA v1.1 provenance with GitHub context
+ * Uses the latest SLSA v1.1 specification with buildDefinition and runDetails
+ */
+export declare function createSLSAProvenanceV11(filesManifest: FileManifest, githubContext: Context): SLSAProvenanceV11;
 /**
  * Validate SLSA provenance structure
  */
