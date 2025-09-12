@@ -32,14 +32,14 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v4
-      
+
       # Build your application
       - name: Build
         run: npm run build
-      
+
       # CryptoGuard V1.0 GitHub OIDC Deployment
       - name: CryptoGuard Deploy
-        uses: cryptoguard/action@v0.1
+        uses: CommandOSSLabs/cryptoguard-action@v0.1
         with:
           domain: example.com
           build-dir: ./dist
@@ -47,8 +47,8 @@ jobs:
         env:
           # Domain verification hash from CLI registration
           CRYPTOGUARD_DOMAIN_HASH: ${{ secrets.CRYPTOGUARD_DOMAIN_HASH }}
-          # Private key for signature authentication 
-          ED25519_PRIVATE_KEY: ${{ secrets.ED25519_PRIVATE_KEY }}
+          # Private key for signature authentication (supports multiple formats)
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
 ```
 
 ## Prerequisites
@@ -56,40 +56,54 @@ jobs:
 Before using this action, you must:
 
 1. **Register your domain** using the CryptoGuard CLI:
+
    ```bash
    cryptoguard register example.com
    ```
-   This generates the required `CRYPTOGUARD_DOMAIN_HASH` and `ED25519_PRIVATE_KEY`.
+
+   This generates the required `CRYPTOGUARD_DOMAIN_HASH` and private key.
 
 2. **Add secrets** to your GitHub repository:
    - `CRYPTOGUARD_DOMAIN_HASH`: Domain verification hash from CLI registration
-   - `ED25519_PRIVATE_KEY`: Private key for signature authentication
+   - `PRIVATE_KEY`: Private key for signature authentication (supports hex, base64, base58, and Sui formats)
 
 ## Inputs
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|---------|
-| `domain` | Domain name for deployment verification | Yes | |
-| `build-dir` | Directory containing built application files | Yes | `./dist` |
-| `network` | Sui/Walrus network (testnet/mainnet) | No | `testnet` |
-| `github-token` | GitHub token for API access (auto-provided) | No | `${{ github.token }}` |
+| Input          | Description                                  | Required | Default               |
+| -------------- | -------------------------------------------- | -------- | --------------------- |
+| `domain`       | Domain name for deployment verification      | Yes      |                       |
+| `build-dir`    | Directory containing built application files | Yes      | `./dist`              |
+| `network`      | Sui/Walrus network (testnet/mainnet)         | No       | `testnet`             |
+| `github-token` | GitHub token for API access (auto-provided)  | No       | `${{ github.token }}` |
 
 ## Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `CRYPTOGUARD_DOMAIN_HASH` | Domain verification hash from CLI registration | Yes |
-| `ED25519_PRIVATE_KEY` | Private key for signature authentication | Yes |
-| `GITHUB_TOKEN` | GitHub token for API access (optional) | No |
+| Variable                  | Description                                                          | Required |
+| ------------------------- | -------------------------------------------------------------------- | -------- |
+| `CRYPTOGUARD_DOMAIN_HASH` | Domain verification hash from CLI registration                       | Yes      |
+| `PRIVATE_KEY`             | Private key for signature authentication (supports multiple formats) | Yes      |
+| `ED25519_PRIVATE_KEY`     | Legacy private key variable (backward compatibility)                 | No       |
+| `GITHUB_TOKEN`            | GitHub token for API access (optional)                               | No       |
+
+### Private Key Format Support
+
+The action supports multiple private key formats for maximum compatibility:
+
+- **Hex format**: `0x1234567890abcdef...` (64-character hex string)
+- **Base64 format**: Standard base64 encoded private keys
+- **Base58 format**: Bitcoin-style base58 encoded keys
+- **Sui format**: `suiprivkey1...` (Sui wallet private key format)
+
+The action automatically detects and normalizes the key format. For backward compatibility, both `PRIVATE_KEY` and `ED25519_PRIVATE_KEY` environment variables are supported.
 
 ## Outputs
 
-| Output | Description |
-|--------|-------------|
-| `success` | Whether deployment completed successfully (`true`/`false`) |
-| `github_attestation` | GitHub OIDC attestation hash for verification |
-| `registry_version` | New version number in Sui registry |
-| `provenance_blob_id` | Walrus blob ID for SLSA provenance |
+| Output               | Description                                                |
+| -------------------- | ---------------------------------------------------------- |
+| `success`            | Whether deployment completed successfully (`true`/`false`) |
+| `github_attestation` | GitHub OIDC attestation hash for verification              |
+| `registry_version`   | New version number in Sui registry                         |
+| `provenance_blob_id` | Walrus blob ID for SLSA provenance                         |
 
 ## Workflow Steps
 
@@ -100,20 +114,24 @@ The action executes the following V1.0 workflow steps:
 3. **Sigstore-Attested SLSA Provenance Generation**: Generate Level 3 SLSA provenance with Cosign attestation
 4. **Walrus Storage Integration**: Upload files to decentralized Walrus storage with cryptographic verification
 5. **Atomic Sui Registry Updates**: Update on-chain domain registry with atomic transactions
-7. **GitHub Integration**: Create deployment status and check runs
+6. **GitHub Integration**: Create deployment status and check runs
 
 ## Security Features
 
 ### Hardware Trust Boundary
+
 All critical operations performed within Nautilus TEE with cryptographic attestation.
 
-### File-Level Verification  
+### File-Level Verification
+
 Each file gets individual SHA256 hash for granular integrity checking.
 
 ### Atomic Transactions
+
 Registry updates with consistency guarantees and automatic rollback.
 
 ### Permanent Audit Trail
+
 Complete verification history stored immutably on blockchain and Walrus.
 
 ## Browser Extension Integration
@@ -121,7 +139,7 @@ Complete verification history stored immutably on blockchain and Walrus.
 After deployment, users with the CryptoGuard browser extension will see **🛡️ VERIFIED** status with:
 
 - Domain verification confirmation
-- File-level integrity checking  
+- File-level integrity checking
 - Hardware attestation validation
 - Real-time provenance verification
 
@@ -158,7 +176,7 @@ npm run build
 # Run unit tests
 npm test
 
-# Run integration tests  
+# Run integration tests
 npm run test:integration
 
 # Run end-to-end tests
@@ -193,3 +211,4 @@ For issues and questions:
 - GitHub Issues: [cryptoguard/cryptoguard](https://github.com/cryptoguard/cryptoguard/issues)
 - Documentation: [docs.cryptoguard.dev](https://docs.cryptoguard.dev)
 - Security: security@cryptoguard.dev
+
