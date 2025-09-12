@@ -1,5 +1,5 @@
 name: 'CryptoGuard Action'
-description: 'V1.0 deployment action with multi-format key support, GitHub OIDC, Sigstore attestation, and blockchain verification'
+description: 'V1.0 deployment action with GitHub OIDC, Sigstore attestation, and blockchain verification'
 author: 'CryptoGuard'
 branding:
   icon: 'shield'

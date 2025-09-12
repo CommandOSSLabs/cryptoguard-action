@@ -7,7 +7,7 @@
 /**
  * Sign a message with Ed25519 private key
  */
-export declare function signMessage(message: string, privateKeyHex: string): string;
+export declare function signMessage(message: string, privateKeyHex: string): Promise<string>;
 /**
  * Verify a signature with Ed25519 public key
  */
@@ -15,14 +15,14 @@ export declare function verifySignature(message: string, signatureHex: string, p
 /**
  * Generate Ed25519 public key from private key
  */
-export declare function getPublicKeyFromPrivate(privateKeyHex: string): string;
+export declare function getPublicKeyFromPrivate(privateKeyHex: string): Promise<string>;
 /**
  * Generate secure random Ed25519 key pair
  */
-export declare function generateKeyPair(): {
+export declare function generateKeyPair(): Promise<{
     privateKey: string;
     publicKey: string;
-};
+}>;
 /**
  * Calculate SHA256 hash of data
  */
