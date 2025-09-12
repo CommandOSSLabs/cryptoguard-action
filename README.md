@@ -39,10 +39,11 @@ jobs:
 
       # CryptoGuard V1.0 GitHub OIDC Deployment
       - name: CryptoGuard Deploy
-        uses: CommandOSSLabs/cryptoguard-action@v0.1
+        uses: CommandOSSLabs/cryptoguard-action@v0.1.1
         with:
           domain: example.com
-          build-dir: ./dist
+          build-dir: ./build
+          # build-dir: ./dist
           network: testnet # or mainnet for production
         env:
           # Domain verification hash from CLI registration
