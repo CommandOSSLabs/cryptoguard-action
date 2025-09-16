@@ -23,6 +23,8 @@ export interface TEEDeploymentRequest {
         run_id: number;
         repository: string;
         workflow: string;
+        commit_sha: string;
+        workflow_ref: string;
     };
     files_manifest: {
         files: Array<{
@@ -30,7 +32,8 @@ export interface TEEDeploymentRequest {
             content_hash: string;
             size_bytes: number;
             content_type: string;
-            modified_at: string;
+            last_modified: number;
+            encoding: string;
         }>;
         total_files: number;
         total_size_bytes: number;
@@ -54,6 +57,8 @@ export interface TEEDeploymentRequest {
         github_repository: string;
         action_version: string;
     };
+    deployment_target: string;
+    expected_version: number;
 }
 export interface TEEDeploymentResponse {
     success: boolean;

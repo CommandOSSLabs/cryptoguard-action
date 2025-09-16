@@ -17,7 +17,9 @@ export interface FileEntry {
     content_hash: string;
     size_bytes: number;
     content_type: string;
-    blob_id: string | null;
+    last_modified: number;
+    encoding: string;
+    blob_id?: string | null;
     created_at?: string;
     modified_at?: string;
     file_mode?: string;
