@@ -58,7 +58,6 @@ export interface TEEDeploymentRequest {
         action_version: string;
     };
     deployment_target: string;
-    expected_version: number;
 }
 export interface TEEDeploymentResponse {
     success: boolean;

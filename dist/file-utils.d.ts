@@ -63,6 +63,20 @@ export interface ProgressEvent {
     error?: Error;
 }
 /**
+ * Build manifest structure for path mapping
+ */
+export interface BuildManifest {
+    [buildPath: string]: string;
+}
+/**
+ * Path mapping configuration
+ */
+export interface PathMappingConfig {
+    useManifest?: boolean;
+    manifestPath?: string;
+    fallbackMapping?: (path: string) => string;
+}
+/**
  * Worker thread data structure
  */
 export interface WorkerData {
