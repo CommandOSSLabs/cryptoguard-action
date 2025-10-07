@@ -64993,6 +64993,26 @@ async function executeDeployment(inputs) {
             },
             error: teeResult.error
         });
+        if (!teeResult.success) {
+            core.error('❌ TEE server reported failure');
+            if (teeResult.error) {
+                core.error(`   Error: ${teeResult.error}`);
+            }
+            return {
+                success: false,
+                error: teeResult.error || 'TEE server reported failure'
+            };
+        }
+        if (teeResult.domain_verified !== true) {
+            core.error('❌ TEE server did not verify the domain');
+            if (teeResult.error) {
+                core.error(`   Error: ${teeResult.error}`);
+            }
+            return {
+                success: false,
+                error: teeResult.error || 'TEE server did not verify the domain'
+            };
+        }
         core.info('✅ TEE processing completed successfully!');
         core.info('🎯 TEE SERVER RESULTS:');
         core.info(`   🆔 Request ID: ${teeResult.request_id}`);
