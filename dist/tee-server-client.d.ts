@@ -3,6 +3,7 @@
  * Handles communication with TEE server for domain verification and Walrus storage
  * Replaces direct Walrus upload and registry update with server-mediated approach
  */
+import type { ManifestQuilt, AttestationQuilt } from './file-utils';
 export interface TEEServerConfig {
     server_url: string;
     timeout?: number;
@@ -12,44 +13,8 @@ export interface TEEServerConfig {
 }
 export interface TEEDeploymentRequest {
     domain: string;
-    domain_verification_hash: string;
-    domain_signature: string;
-    github_attestation: {
-        hash: string;
-        signature: string;
-        oidc_token: string;
-        timestamp: string;
-        attestation_type: string;
-        run_id: number;
-        repository: string;
-        workflow: string;
-        commit_sha: string;
-        workflow_ref: string;
-    };
-    files_manifest: {
-        files: Array<{
-            path: string;
-            content_hash: string;
-            size_bytes: number;
-            content_type: string;
-            last_modified: number;
-            encoding: string;
-        }>;
-        total_files: number;
-        total_size_bytes: number;
-        manifest_hash: string;
-        created_at: string;
-    };
-    provenance_attestation: {
-        cosign_signature: string;
-        attestation_id: string;
-        sigstore_bundle: any;
-        timestamp: string;
-        slsa_level: number;
-        attestation_hash: string;
-        oidc_issuer: string;
-        certificate?: string;
-    };
+    manifest_quilt: ManifestQuilt;
+    attestation_quilt: AttestationQuilt;
     network: string;
     client_info: {
         user_agent: string;
@@ -57,32 +22,34 @@ export interface TEEDeploymentRequest {
         github_repository: string;
         action_version: string;
     };
-    deployment_target: string;
 }
 export interface TEEDeploymentResponse {
     success: boolean;
     request_id: string;
-    domain_verified: boolean;
-    verification_timestamp: string;
-    walrus_upload: {
-        blob_mapping: Record<string, string>;
-        total_blobs: number;
-        total_size_bytes: number;
-        upload_duration_ms: number;
-        storage_epochs: number;
-    };
-    provenance_storage: {
+    domain_verified?: boolean;
+    verification_timestamp?: string;
+    manifest_quilt?: {
         blob_id: string;
-        storage_timestamp: string;
+        upload_duration_ms: number;
+        size_bytes: number;
     };
-    registry_update: {
+    attestation_quilt?: {
+        blob_id: string;
+        upload_duration_ms: number;
+        size_bytes: number;
+    };
+    version_history?: {
+        new_version: number;
+        previous_version: number;
+    };
+    registry_update?: {
         success: boolean;
         new_version: string;
         transaction_id: string;
         block_hash?: string;
         gas_used?: number;
     };
-    tee_attestation: {
+    tee_attestation?: {
         measurement_hash: string;
         attestation_signature: string;
         timestamp: string;
