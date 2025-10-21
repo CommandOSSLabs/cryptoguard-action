@@ -28,12 +28,7 @@ export interface TEEDeploymentResponse {
     request_id: string;
     domain_verified?: boolean;
     verification_timestamp?: string;
-    manifest_quilt?: {
-        blob_id: string;
-        upload_duration_ms: number;
-        size_bytes: number;
-    };
-    attestation_quilt?: {
+    quilt?: {
         blob_id: string;
         upload_duration_ms: number;
         size_bytes: number;
