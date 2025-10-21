@@ -100,42 +100,35 @@ export declare const QUILT_VERSION = "1.0";
 export declare const MANIFEST_QUILT_TYPE = "manifest";
 export declare const ATTESTATION_QUILT_TYPE = "attestation";
 /**
- * Manifest Quilt - Contains file manifest and deployment metadata
+ * Manifest Quilt - Empty placeholder (file hashes are in attestation)
  * This quilt is prepared by GitHub Action and sent to verification server
  * The verification server will upload it to Walrus
+ *
+ * NOTE: File hashes are extracted from the sigstore attestation bundle,
+ * not from a separate manifest. This ensures cryptographic integrity.
  */
 export interface ManifestQuilt {
     quilt_type: 'manifest';
     quilt_version: '1.0';
     domain: string;
-    files_manifest: {
-        files: Array<{
-            path: string;
-            content_hash: string;
-            size_bytes: number;
-            content_type: string;
-            last_modified: number;
-            encoding: string;
-        }>;
-        total_files: number;
-        total_size_bytes: number;
-        manifest_hash: string;
-        created_at: string;
-    };
+    files_manifest: {};
     metadata: {
-        build_timestamp: string;
-        github_repo: string;
-        commit_sha: string;
-        workflow_ref: string;
-        deployment_target: string;
+        note: string;
     };
     created_at: string;
     quilt_hash: string;
 }
 /**
- * Attestation Quilt - Contains signatures, proofs, and attestations
+ * Attestation Quilt - Contains raw sigstore attestation bundle
  * This quilt is prepared by GitHub Action and sent to verification server
  * The verification server will upload it to Walrus
+ *
+ * NOTE: We store the RAW sigstore bundle (SerializedBundle) which contains:
+ * - File hashes (in the provenance subject)
+ * - Cryptographic signatures
+ * - Certificate chain
+ * - Transparency log entry
+ * This ensures all data comes from a single cryptographically verified source.
  */
 export interface AttestationQuilt {
     quilt_type: 'attestation';
@@ -147,27 +140,14 @@ export interface AttestationQuilt {
         signature_timestamp: string;
     };
     github_attestation: {
-        hash: string;
-        signature: string;
-        oidc_token: string;
-        timestamp: string;
-        attestation_type: string;
         run_id: number;
         repository: string;
         workflow: string;
         commit_sha: string;
         workflow_ref: string;
-    };
-    provenance_attestation: {
-        cosign_signature: string;
-        attestation_id: string;
-        sigstore_bundle: any;
         timestamp: string;
-        slsa_level: number;
-        attestation_hash: string;
-        oidc_issuer: string;
-        certificate?: string;
     };
+    sigstore_attestation_bundle: any;
     created_at: string;
     quilt_hash: string;
 }
@@ -182,7 +162,8 @@ export declare function generateFileManifest(buildDir: string, options: FileMani
  */
 export declare function createProgressReporter(): EventEmitter;
 /**
- * Build manifest quilt from files manifest and metadata
+ * Build manifest quilt - now returns EMPTY structure
+ * File hashes are extracted from the sigstore attestation bundle instead
  * The quilt is prepared as JSON and sent to verification server
  * The verification server will upload it to Walrus
  */
@@ -194,34 +175,26 @@ export declare function buildManifestQuilt(domain: string, filesManifest: FileMa
     deploymentTarget: string;
 }): ManifestQuilt;
 /**
- * Build attestation quilt from domain verification and attestations
+ * Build attestation quilt with RAW sigstore bundle
  * The quilt is prepared as JSON and sent to verification server
  * The verification server will upload it to Walrus
+ *
+ * IMPORTANT: We now store the RAW sigstore bundle (SerializedBundle) which contains:
+ * - File hashes in the provenance subject
+ * - SLSA provenance data
+ * - Cryptographic signatures and certificates
+ * This ensures single source of truth from sigstore.
  */
 export declare function buildAttestationQuilt(domain: string, domainVerification: {
     domainVerificationHash: string;
     domainSignature: string;
-}, githubAttestation: {
-    hash: string;
-    signature: string;
-    oidc_token: string;
-    timestamp: string;
-    attestation_type: string;
+}, githubContext: {
     run_id: number;
     repository: string;
     workflow: string;
     commit_sha: string;
     workflow_ref: string;
-}, provenanceAttestation: {
-    cosign_signature: string;
-    attestation_id: string;
-    sigstore_bundle: any;
-    timestamp: string;
-    slsa_level: number;
-    attestation_hash: string;
-    oidc_issuer: string;
-    certificate?: string;
-}): AttestationQuilt;
+}, rawSigstoreBundle: any): AttestationQuilt;
 /**
  * Validate quilt structure before sending to server
  * Checks required fields and size limits
