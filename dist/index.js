@@ -98248,6 +98248,7 @@ const core = __importStar(__nccwpck_require__(50099));
 const github = __importStar(__nccwpck_require__(14656));
 const fs = __importStar(__nccwpck_require__(91943));
 const path = __importStar(__nccwpck_require__(16928));
+const crypto_1 = __nccwpck_require__(76982);
 const github_attestation_client_1 = __nccwpck_require__(76064);
 const tee_server_client_1 = __nccwpck_require__(80834);
 const file_utils_1 = __nccwpck_require__(25868);
@@ -98591,109 +98592,30 @@ async function executeDeployment(inputs) {
         total_size_kb: (totalSize / 1024).toFixed(1),
         blob_mapping: blobMapping
     });
-    // Step 5: TEE Verification (Read-Only)
-    core.info('Step 5: TEE Server Verification');
+    // Step 5: TEE Attestation Request
+    core.info('Step 5: TEE Server Attestation');
+    // Initialize TEE client
     const teeClient = new tee_server_client_1.TEEServerClient({
         server_url: inputs.teeServerUrl,
         timeout: 300000,
         max_retries: 3,
         retry_delay_ms: 2000
     });
+    // Sign domain ownership message
     const teedomainSignature = await (0, crypto_utils_1.signMessage)(domainOwnershipMessage, inputs.privateKey);
-    const manifestHash = await (0, crypto_utils_1.signMessage)(JSON.stringify(filesManifest), inputs.privateKey);
-    const teeFilesManifest = {
-        files: filesManifest.files.map((file) => ({
-            path: file.path,
-            content_hash: file.content_hash,
-            size_bytes: file.size_bytes,
-            content_type: file.content_type,
-            last_modified: file.last_modified,
-            encoding: file.encoding
-        })),
+    // Compute manifest hash (SHA-256 of the manifest JSON)
+    const manifestJson = JSON.stringify({
+        files: filesManifest.files,
         total_files: filesManifest.total_files,
-        total_size_bytes: filesManifest.total_size_bytes,
-        manifest_hash: manifestHash,
-        created_at: filesManifest.timestamp
-    };
-    // Construct simplified github_attestation (Phase 0 API alignment)
-    // TEE server now handles OIDC verification directly
-    const teeRequest = {
-        domain: inputs.domain,
-        domain_signature: teedomainSignature,
-        github_attestation: {
-            timestamp: new Date().toISOString(),
-            run_id: github.context.runId,
-            repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
-            workflow: github.context.workflow,
-            commit_sha: github.context.sha,
-            workflow_ref: github.context.ref
-        },
-        files_manifest: teeFilesManifest,
-        walrus_blob_mapping: blobMapping,
-        provenance_blob_id: provenanceBlob.blobId,
-        provenance_attestation: attestedProvenance,
-        network: inputs.network,
-        client_info: {
-            user_agent: `CryptoGuard-Action/0.2.0`,
-            github_run_id: github.context.runId.toString(),
-            github_repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
-            action_version: '0.2.0'
-        },
-        deployment_target: 'walrus'
-    };
-    debugLog('Complete TEE server request payload', {
-        domain: teeRequest.domain,
-        domain_signature: teeRequest.domain_signature?.substring(0, 32) + '...',
-        github_attestation: {
-            timestamp: teeRequest.github_attestation.timestamp,
-            run_id: teeRequest.github_attestation.run_id,
-            repository: teeRequest.github_attestation.repository,
-            workflow: teeRequest.github_attestation.workflow,
-            commit_sha: teeRequest.github_attestation.commit_sha,
-            workflow_ref: teeRequest.github_attestation.workflow_ref
-        },
-        files_manifest: {
-            files_count: teeRequest.files_manifest.files.length,
-            total_files: teeRequest.files_manifest.total_files,
-            total_size_bytes: teeRequest.files_manifest.total_size_bytes,
-            sample_files: teeRequest.files_manifest.files.slice(0, 2).map(f => ({
-                path: f.path,
-                content_hash: f.content_hash?.substring(0, 16) + '...',
-                size_bytes: f.size_bytes,
-                content_type: f.content_type,
-                last_modified: f.last_modified,
-                encoding: f.encoding
-            }))
-        },
-        provenance_attestation: {
-            cosign_signature: teeRequest.provenance_attestation?.cosign_signature?.substring(0, 32) + '...',
-            attestation_id: teeRequest.provenance_attestation?.attestation_id,
-            slsa_level: teeRequest.provenance_attestation?.slsa_level
-        },
-        network: teeRequest.network,
-        deployment_target: teeRequest.deployment_target,
-        client_info: teeRequest.client_info
+        total_size_bytes: filesManifest.total_size_bytes
     });
-    const teeResult = await teeClient.submitDeployment(teeRequest);
-    // Fail-fast: Check TEE verification result
-    if (!teeResult.success) {
-        throw new Error(`TEE verification failed: ${teeResult.error || 'Unknown error'}`);
-    }
-    const walrusVerification = teeResult.verification_result?.walrus_verification;
-    const teeAttestation = teeResult.tee_attestation || teeResult.verification_result?.tee_attestation;
-    if (!teeAttestation) {
-        throw new Error('TEE attestation missing from verification response');
-    }
-    core.info(`✓ Verified (Domain, GitHub, Provenance, Walrus blobs)`);
-    debugLog('TEE verification result', {
-        request_id: teeResult.request_id,
-        domain_verified: teeResult.domain_verified || teeResult.verification_result?.domain_verified,
-        github_verified: teeResult.verification_result?.github_verified,
-        provenance_verified: teeResult.verification_result?.provenance_verified,
-        all_blobs_verified: walrusVerification?.all_blobs_verified,
-        attestation_hash: teeAttestation.measurement_hash.substring(0, 32) + '...'
+    const manifestHash = (0, crypto_1.createHash)('sha256').update(manifestJson).digest('hex');
+    debugLog('TEE preparation', {
+        domain_signature: teedomainSignature.substring(0, 32) + '...',
+        manifest_hash: manifestHash.substring(0, 32) + '...',
+        tee_server: inputs.teeServerUrl
     });
-    // Initialize Sui client (needed for both flows)
+    // Initialize Sui client
     const suiClient = new sui_client_1.CryptoGuardSuiClient({
         rpcUrl: inputs.suiRpcUrl,
         network: inputs.network,
@@ -98716,11 +98638,7 @@ async function executeDeployment(inputs) {
         owner: domainRecord.owner,
         currentVersion: domainRecord.currentVersion.toString()
     });
-    // =========================================================================
-    // Step 6: Submit TEE Attestation to Blockchain (On-Chain Verification)
-    // =========================================================================
-    core.info('Step 6: Submit TEE Attestation to Blockchain (On-Chain Verification)');
-    // Build TEE attestation request for the /attest endpoint
+    // Build TEE attestation request for the /attest endpoint (per TEE_ATTESTATION_ARCHITECTURE.md)
     const teeAttestationRequest = {
         domain: inputs.domain,
         domain_signature: teedomainSignature,
@@ -98729,9 +98647,9 @@ async function executeDeployment(inputs) {
         metadata_quilt_id: quiltDeployment.metadataQuilt.blobId,
         provenance_blob_id: provenanceBlob.blobId,
         files_manifest: {
-            manifest_hash: teeFilesManifest.manifest_hash,
-            total_files: teeFilesManifest.total_files,
-            total_size_bytes: teeFilesManifest.total_size_bytes,
+            manifest_hash: manifestHash,
+            total_files: filesManifest.total_files,
+            total_size_bytes: filesManifest.total_size_bytes,
         },
         github_context: {
             repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
@@ -98756,8 +98674,18 @@ async function executeDeployment(inputs) {
             github_context: teeAttestationRequest.github_context,
         });
     }
-    // Request TEE attestation from server
-    core.info('   Requesting TEE attestation...');
+    // Request TEE attestation from server (POST /api/v1/attest)
+    debugLog('Sending TEE attestation request', {
+        endpoint: `${inputs.teeServerUrl}/attest`,
+        domain: teeAttestationRequest.domain,
+        site_record_id: teeAttestationRequest.site_record_id,
+        content_quilt_id: teeAttestationRequest.content_quilt_id.substring(0, 16) + '...',
+        metadata_quilt_id: teeAttestationRequest.metadata_quilt_id.substring(0, 16) + '...',
+        provenance_blob_id: teeAttestationRequest.provenance_blob_id.substring(0, 16) + '...',
+        manifest_hash: teeAttestationRequest.files_manifest.manifest_hash.substring(0, 16) + '...',
+        github_repo: teeAttestationRequest.github_context.repository,
+    });
+    core.info('   Requesting TEE attestation from server...');
     const attestationResponse = await teeClient.requestAttestation(teeAttestationRequest);
     if (!(0, tee_attestation_1.isSuccessfulAttestation)(attestationResponse)) {
         const errorMsg = attestationResponse.error_code
@@ -98766,6 +98694,7 @@ async function executeDeployment(inputs) {
         throw new Error(`TEE attestation failed: ${errorMsg}`);
     }
     const teeAttestationProof = attestationResponse.attestation;
+    core.info('✓ TEE attestation received');
     debugLog('TEE attestation received', {
         payload_hash: teeAttestationProof.payload.files_manifest_hash,
         signature: teeAttestationProof.signature.substring(0, 32) + '...',
@@ -98779,8 +98708,9 @@ async function executeDeployment(inputs) {
         core.info(`     Provenance verified: ${attestationResponse.verification_summary.provenance_verified}`);
         core.info(`     Walrus blobs verified: ${attestationResponse.verification_summary.walrus_blobs_verified}`);
     }
-    // Submit attestation to smart contract for on-chain verification
-    core.info('   Submitting attestation to smart contract...');
+    // Step 6: Submit attestation to smart contract for on-chain verification
+    core.info('Step 6: Submit to Blockchain');
+    core.info('   Submitting TEE attestation to smart contract...');
     const attestationTxResult = await suiClient.updateSiteWithTEEAttestation(inputs.privateKey, domainRecord.id, teeAttestationProof, {
         maxAttestationAge: 300, // 5 minutes
         expectedEnclaveMeasurement: inputs.expectedEnclaveMeasurement,
@@ -98821,14 +98751,14 @@ async function executeDeployment(inputs) {
             metadata_quilt_id: quiltDeployment.metadataQuilt.blobId,
         },
         teeVerification: {
-            request_id: teeResult.request_id,
-            domain_verified: teeResult.domain_verified || teeResult.verification_result?.domain_verified || false,
-            github_verified: teeResult.verification_result?.github_verified || false,
-            provenance_verified: teeResult.verification_result?.provenance_verified || false,
+            request_id: attestationResponse.request_id,
+            domain_verified: attestationResponse.verification_summary?.domain_verified || false,
+            github_verified: attestationResponse.verification_summary?.github_verified || false,
+            provenance_verified: attestationResponse.verification_summary?.provenance_verified || false,
             tee_attestation: {
-                measurement_hash: teeAttestation.measurement_hash,
-                attestation_signature: teeAttestation.attestation_signature,
-                timestamp: teeAttestation.timestamp,
+                measurement_hash: teeAttestationProof.enclave_measurement,
+                attestation_signature: teeAttestationProof.signature,
+                timestamp: attestationResponse.verification_summary?.timestamp || new Date().toISOString(),
             },
         },
         blockchainTransaction: {
