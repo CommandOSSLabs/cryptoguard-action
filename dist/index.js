@@ -101945,7 +101945,7 @@ class WalrusClient {
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-                const response = await (globalThis.fetch || fetch)(`${this.publisherUrl}/v1/store`, {
+                const response = await (globalThis.fetch || fetch)(`${this.publisherUrl}/v1/blobs`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/octet-stream',
