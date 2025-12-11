@@ -5,7 +5,6 @@
  */
 export interface TEEClientConfig {
     region: string;
-    domain_verify_hash: string;
     private_key: string;
     timeout?: number;
     max_retries?: number;
@@ -23,6 +22,7 @@ export interface RetryConfig {
 export interface DomainVerificationRequest {
     domain: string;
     signature: string;
+    publicKey: string;
 }
 export interface DomainVerificationResult {
     verified: boolean;

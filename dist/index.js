@@ -96232,6 +96232,139 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
+/***/ 54539:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Feature Flags for TEE Attestation Flow
+ *
+ * These flags control optional behavior in the TEE attestation flow.
+ * The TEE attestation flow is now the only supported deployment method.
+ *
+ * @module config/feature-flags
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DEFAULT_FEATURE_FLAGS = void 0;
+exports.getFeatureFlags = getFeatureFlags;
+exports.describeActiveFlags = describeActiveFlags;
+exports.validateFeatureFlags = validateFeatureFlags;
+/**
+ * Default feature flags for production use.
+ *
+ * All flags default to `false` for standard operation.
+ * Flags can be enabled via environment variables or action inputs.
+ */
+exports.DEFAULT_FEATURE_FLAGS = Object.freeze({
+    verboseAttestationLogging: false,
+});
+/**
+ * Parse a string value to a boolean.
+ *
+ * Accepts 'true', '1', 'yes' (case-insensitive) as truthy values.
+ * All other values are considered falsy.
+ *
+ * @param value - String value to parse
+ * @returns Boolean interpretation of the value
+ *
+ * @internal
+ */
+function parseBoolean(value) {
+    if (!value)
+        return false;
+    const normalized = value.toLowerCase().trim();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+/**
+ * Get feature flags from environment variables and/or action inputs.
+ *
+ * Priority order (highest to lowest):
+ * 1. Action inputs (if provided)
+ * 2. Environment variables
+ * 3. Default values
+ *
+ * Environment variables:
+ * - `CRYPTOGUARD_VERBOSE_ATTESTATION` - Enable verbose logging
+ *
+ * Action inputs:
+ * - `verbose_attestation` - Enable verbose logging
+ *
+ * @param inputs - Optional action inputs object with string values
+ * @returns Resolved feature flags
+ *
+ * @example
+ * ```typescript
+ * // Get flags from environment only
+ * const flags = getFeatureFlags();
+ *
+ * // Get flags with action inputs
+ * const flags = getFeatureFlags({
+ *   verbose_attestation: 'true',
+ * });
+ *
+ * if (flags.verboseAttestationLogging) {
+ *   // Log detailed attestation info
+ * }
+ * ```
+ */
+function getFeatureFlags(inputs) {
+    return {
+        verboseAttestationLogging: parseBoolean(inputs?.verbose_attestation) ||
+            parseBoolean(process.env.CRYPTOGUARD_VERBOSE_ATTESTATION),
+    };
+}
+/**
+ * Get a human-readable description of active feature flags.
+ *
+ * Useful for logging the current configuration state.
+ *
+ * @param flags - Feature flags to describe
+ * @returns Array of enabled flag descriptions
+ *
+ * @example
+ * ```typescript
+ * const flags = getFeatureFlags();
+ * console.log('Active flags:', describeActiveFlags(flags).join(', '));
+ * // Output: "Active flags: Verbose Attestation Logging"
+ * ```
+ */
+function describeActiveFlags(flags) {
+    const active = [];
+    if (flags.verboseAttestationLogging) {
+        active.push('Verbose Attestation Logging');
+    }
+    return active;
+}
+/**
+ * Validate feature flag combinations for consistency.
+ *
+ * Currently there are no invalid combinations since TEE attestation
+ * is the only supported flow.
+ *
+ * @param flags - Feature flags to validate
+ * @returns Object with validation result and any warnings
+ *
+ * @example
+ * ```typescript
+ * const flags = getFeatureFlags();
+ * const validation = validateFeatureFlags(flags);
+ * if (validation.warnings.length > 0) {
+ *   console.warn('Feature flag warnings:', validation.warnings);
+ * }
+ * ```
+ */
+function validateFeatureFlags(_flags) {
+    // No invalid combinations for the simplified flag set
+    return {
+        valid: true,
+        warnings: [],
+    };
+}
+
+
+/***/ }),
+
 /***/ 79079:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -97428,9 +97561,6 @@ class GitHubAttestationClient {
      * Validate and normalize the GitHub attestation configuration
      */
     validateAndNormalizeConfig(config) {
-        if (!config.domain_verify_hash || typeof config.domain_verify_hash !== 'string') {
-            throw new GitHubAttestationError('Domain verify hash is required', 'INVALID_CONFIG');
-        }
         if (!config.private_key || typeof config.private_key !== 'string') {
             throw new GitHubAttestationError('Private key is required', 'INVALID_CONFIG');
         }
@@ -97603,7 +97733,10 @@ class GitHubAttestationClient {
         }
     }
     /**
-     * Verify domain ownership using GitHub OIDC
+     * Verify domain ownership using signature verification
+     *
+     * Note: OIDC token fetching removed as part of Phase 0 API alignment.
+     * The TEE server now handles OIDC verification directly.
      */
     async verifyDomainOwnership(request) {
         return this.withRetry(async () => {
@@ -97615,19 +97748,18 @@ class GitHubAttestationClient {
                 if (!request.signature || typeof request.signature !== 'string') {
                     throw new GitHubAttestationError('Signature is required and must be a valid string', 'INVALID_INPUT');
                 }
+                if (!request.publicKey || typeof request.publicKey !== 'string') {
+                    throw new GitHubAttestationError('Public key is required and must be a valid string', 'INVALID_INPUT');
+                }
                 // Verify the signature matches the domain using same format as CLI register command
+                // Use the user's public key from the request to verify their domain ownership signature
                 const domainOwnershipMessage = `CryptoGuard Domain Ownership: ${request.domain}`;
-                const publicKey = await (0, crypto_utils_1.getPublicKeyFromPrivate)(this.config.private_key);
-                const isValidSignature = await (0, crypto_utils_1.verifySignature)(domainOwnershipMessage, request.signature, publicKey);
+                const isValidSignature = await (0, crypto_utils_1.verifySignature)(domainOwnershipMessage, request.signature, request.publicKey);
                 if (!isValidSignature) {
                     return {
                         verified: false,
                         github_attestation: {
-                            hash: '',
-                            signature: '',
-                            oidc_token: '',
                             timestamp: new Date().toISOString(),
-                            attestation_type: 'github-oidc',
                             run_id: 0,
                             repository: '',
                             workflow: ''
@@ -97635,16 +97767,9 @@ class GitHubAttestationClient {
                         error: 'Invalid domain signature'
                     };
                 }
-                // Get GitHub OIDC token
-                const oidcToken = await this.getOIDCToken();
-                // Create GitHub attestation
-                const attestationHash = `${request.domain}-${Date.now()}`;
+                // Create simplified GitHub attestation (OIDC handled by TEE server)
                 const githubAttestation = {
-                    hash: attestationHash,
-                    signature: request.signature,
-                    oidc_token: oidcToken,
                     timestamp: new Date().toISOString(),
-                    attestation_type: 'github-oidc',
                     run_id: parseInt(process.env.GITHUB_RUN_ID || '0'),
                     repository: process.env.GITHUB_REPOSITORY || '',
                     workflow: process.env.GITHUB_WORKFLOW || ''
@@ -97677,31 +97802,29 @@ class GitHubAttestationClient {
                 }
                 // Get OIDC token
                 const oidcToken = await this.getOIDCToken();
-                // Prepare provenance payload for attestation
+                // Prepare provenance payload for signing
                 const provenancePayload = JSON.stringify({
                     provenance: request.provenance,
                     files_manifest: request.files_manifest,
                     github_context: request.github_context,
                     timestamp: new Date().toISOString()
                 });
-                // Create attestation with Sigstore using GitHub OIDC (creates DSSE envelope)
-                // Use attest() for proper SLSA provenance attestation format
-                const attestationResult = await (0, sigstore_1.attest)(Buffer.from(provenancePayload), 'https://slsa.dev/provenance/v1', // SLSA provenance predicate type
-                {
+                // Sign with Sigstore using GitHub OIDC
+                const signingResult = await (0, sigstore_1.sign)(Buffer.from(provenancePayload), {
                     identityToken: oidcToken,
                     fulcioURL: 'https://fulcio.sigstore.dev',
                     rekorURL: 'https://rekor.sigstore.dev'
                 });
                 const attestationId = `github-${Date.now()}-${Math.random().toString(36).substring(7)}`;
                 const attestationHash = Buffer.from(provenancePayload).toString('hex').substring(0, 32);
-                // Extract signature and certificate from SerializedBundle (DSSE envelope format)
-                const signature = attestationResult.dsseEnvelope?.signatures?.[0]?.sig || '';
-                const certificate = attestationResult.verificationMaterial?.certificate?.rawBytes ||
-                    attestationResult.verificationMaterial?.x509CertificateChain?.certificates?.[0]?.rawBytes || '';
+                // Extract signature and certificate from SerializedBundle
+                const signature = signingResult.messageSignature?.signature || '';
+                const certificate = signingResult.verificationMaterial?.certificate?.rawBytes ||
+                    signingResult.verificationMaterial?.x509CertificateChain?.certificates?.[0]?.rawBytes || '';
                 return {
                     cosign_signature: signature,
                     attestation_id: attestationId,
-                    sigstore_bundle: attestationResult, // Now contains dsseEnvelope
+                    sigstore_bundle: signingResult,
                     timestamp: new Date().toISOString(),
                     slsa_level: 3, // SLSA Level 3 with GitHub OIDC
                     attestation_hash: attestationHash,
@@ -97935,7 +98058,7 @@ class GitHubAttestationClient {
             return {
                 site_record_id: siteRecord.data.objectId,
                 domain: fields.domain,
-                domain_verification_hash: fields.domain_verification_hash,
+                challenge_value: fields.challenge_value,
                 owner: fields.owner,
                 registered_at: fields.registered_at,
                 expires_at: fields.expires_at,
@@ -98081,9 +98204,10 @@ exports.GitHubAttestationClient = GitHubAttestationClient;
 /***/ }),
 
 /***/ 15187:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+/***/ (function(module, exports, __nccwpck_require__) {
 
 "use strict";
+/* module decorator */ module = __nccwpck_require__.nmd(module);
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -98122,11 +98246,18 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.run = run;
 const core = __importStar(__nccwpck_require__(50099));
 const github = __importStar(__nccwpck_require__(14656));
+const fs = __importStar(__nccwpck_require__(91943));
+const path = __importStar(__nccwpck_require__(16928));
 const github_attestation_client_1 = __nccwpck_require__(76064);
 const tee_server_client_1 = __nccwpck_require__(80834);
 const file_utils_1 = __nccwpck_require__(25868);
 const provenance_1 = __nccwpck_require__(90777);
 const crypto_utils_1 = __nccwpck_require__(79079);
+const walrus_client_1 = __nccwpck_require__(46854);
+const sui_client_1 = __nccwpck_require__(88759);
+// TEE Attestation Flow imports
+const feature_flags_1 = __nccwpck_require__(54539);
+const tee_attestation_1 = __nccwpck_require__(91831);
 // Global debug mode flag - set during initialization
 let isDebugMode = false;
 /**
@@ -98153,101 +98284,123 @@ async function run() {
         const inputs = parseInputs();
         // Set global debug mode
         isDebugMode = inputs.debugMode;
-        core.startGroup('🚀 CryptoGuard V1.0 Deploy - Configuration');
-        core.info('='.repeat(60));
-        core.info('🛡️  CRYPTOGUARD V1.0 DEPLOYMENT STARTING');
-        core.info('='.repeat(60));
-        core.info('');
-        core.info('📋 DEPLOYMENT CONFIGURATION:');
-        core.info(`   🌐 Domain: ${inputs.domain}`);
-        core.info(`   📁 Build Directory: ${inputs.buildDir}`);
-        core.info(`   🌐 Network: ${inputs.network}`);
-        core.info(`   🖥️  TEE Server: ${inputs.teeServerUrl}`);
-        core.info(`   🔑 Private Key: ${inputs.privateKey ? `${inputs.privateKey.substring(0, 16)}...` : 'Not provided'}`);
-        core.info(`   📝 Domain Hash: ${inputs.domainVerifyHash ? `${inputs.domainVerifyHash.substring(0, 16)}...` : 'Not provided'}`);
-        if (inputs.debugMode) {
-            core.info(`   🐛 Debug Mode: ENABLED`);
-            debugLog('Full environment variables (filtered)', {
-                NODE_ENV: process.env.NODE_ENV,
-                GITHUB_ACTIONS: process.env.GITHUB_ACTIONS,
-                RUNNER_OS: process.env.RUNNER_OS,
-                CRYPTOGUARD_DEBUG: process.env.CRYPTOGUARD_DEBUG,
-                ACTIONS_RUNNER_DEBUG: process.env.ACTIONS_RUNNER_DEBUG
-            });
+        core.info('🚀 CryptoGuard User-Based Deployment');
+        core.info(`Domain: ${inputs.domain} | Network: ${inputs.network}`);
+        // Log TEE attestation flow status
+        core.info('🔐 TEE Attestation Flow: ENABLED (On-Chain Verification)');
+        if (inputs.verboseAttestation) {
+            core.info('   Verbose attestation logging: ENABLED');
         }
-        else {
-            core.info(`   🐛 Debug Mode: DISABLED`);
-        }
-        core.info('');
-        core.info('🔧 GITHUB CONTEXT:');
-        core.info(`   📦 Repository: ${github.context.repo.owner}/${github.context.repo.repo}`);
-        core.info(`   🌿 Branch: ${github.context.ref}`);
-        core.info(`   👤 Actor: ${github.context.actor}`);
-        core.info(`   🔄 Workflow: ${github.context.workflow}`);
-        core.info(`   🆔 Run ID: ${github.context.runId}`);
-        core.info(`   📊 Event: ${github.context.eventName}`);
-        debugLog('Full GitHub context', {
-            sha: github.context.sha,
+        debugLog('Deployment configuration', {
+            domain: inputs.domain,
+            buildDir: inputs.buildDir,
+            network: inputs.network,
+            suiRpcUrl: inputs.suiRpcUrl,
+            registryId: inputs.registryId,
+            walrusPublisherUrl: inputs.walrusPublisherUrl,
+            gasBudget: inputs.gasBudget
+        });
+        debugLog('GitHub context', {
+            repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
             ref: github.context.ref,
-            payload: github.context.payload,
-            job: github.context.job,
-            runNumber: github.context.runNumber,
-            serverUrl: github.context.serverUrl
+            actor: github.context.actor,
+            workflow: github.context.workflow,
+            runId: github.context.runId,
+            sha: github.context.sha
         });
         core.info('');
-        core.endGroup();
-        // Execute deployment workflow
+        // Execute deployment workflow (throws on error)
         const result = await executeDeployment(inputs);
-        if (!result.success) {
-            core.setFailed(result.error || 'Deployment failed');
-            return;
-        }
-        // Set action outputs
+        // If we get here, deployment succeeded
         core.setOutput('success', 'true');
-        core.setOutput('github_attestation', result.githubAttestation?.hash);
-        if (result.teeDeployment) {
-            core.setOutput('registry_version', result.teeDeployment.registry_version);
-            core.setOutput('provenance_blob_id', result.teeDeployment.provenance_blob_id);
-            core.setOutput('transaction_id', result.teeDeployment.transaction_id);
-            core.setOutput('tee_request_id', result.teeDeployment.request_id);
-            core.setOutput('tee_attestation_hash', result.teeDeployment.tee_attestation.measurement_hash);
-        }
+        core.setOutput('github_attestation', `${result.githubAttestation.repository}@${result.githubAttestation.run_id}`);
+        core.setOutput('provenance_blob_id', result.walrusUpload.provenance_blob_id);
+        core.setOutput('content_quilt_id', result.walrusUpload.content_quilt_id);
+        core.setOutput('metadata_quilt_id', result.walrusUpload.metadata_quilt_id);
+        core.setOutput('registry_version', result.blockchainTransaction.new_version);
+        core.setOutput('transaction_digest', result.blockchainTransaction.digest);
+        core.setOutput('site_record_id', result.blockchainTransaction.site_record_id);
+        core.setOutput('tee_request_id', result.teeVerification.request_id);
+        core.setOutput('tee_attestation_hash', result.teeVerification.tee_attestation.measurement_hash);
+        // TEE Attestation Flow outputs
+        core.setOutput('tee_enclave_measurement', result.teeAttestationProof.enclave_measurement);
+        core.setOutput('tee_public_key', result.teeAttestationProof.public_key);
+        core.setOutput('tee_onchain_verified', 'true');
+        core.setOutput('tee_signature_valid', String(result.onChainVerification.signatureValid));
+        core.setOutput('tee_measurement_valid', String(result.onChainVerification.measurementValid));
+        core.setOutput('tee_payload_valid', String(result.onChainVerification.payloadValid));
+        core.setOutput('tee_not_expired', String(result.onChainVerification.notExpired));
         // Create GitHub integrations
         await createGitHubIntegrations(inputs, result);
         // Final deployment summary
-        core.startGroup('🎉 CryptoGuard V1.0 Deployment Complete');
-        core.info('='.repeat(60));
-        core.info('🎉 CRYPTOGUARD V1.0 DEPLOYMENT COMPLETED SUCCESSFULLY!');
-        core.info('='.repeat(60));
         core.info('');
-        core.info('📊 DEPLOYMENT SUMMARY:');
-        core.info(`   🌐 Domain: ${inputs.domain}`);
-        core.info(`   📁 Files Deployed: ${result.filesManifest?.total_files || 0}`);
-        core.info(`   💾 Total Size: ${result.filesManifest ? (result.filesManifest.total_size_bytes / 1024).toFixed(1) : 0} KB`);
-        core.info(`   🔢 Registry Version: ${result.teeDeployment?.registry_version || 'N/A'}`);
-        core.info(`   🔗 Transaction ID: ${result.teeDeployment?.transaction_id || 'N/A'}`);
-        core.info('');
-        core.info('🔗 IMPORTANT LINKS:');
-        if (result.teeDeployment?.transaction_id) {
-            core.info(`   🔍 Sui Transaction: https://suiscan.xyz/${inputs.network}/tx/${result.teeDeployment.transaction_id}`);
-        }
-        if (result.teeDeployment?.request_id) {
-            core.info(`   📋 TEE Request: ${inputs.teeServerUrl}/requests/${result.teeDeployment.request_id}`);
-        }
-        core.info(`   🌐 Deployed Site: https://${inputs.domain}`);
-        core.info('');
-        core.info('✅ Your application is now securely deployed with:');
-        core.info('   🛡️  GitHub OIDC Authentication');
-        core.info('   📝 Sigstore SLSA Provenance Attestation');
-        core.info('   🐋 Walrus Decentralized Storage');
-        core.info('   📋 Sui Registry On-Chain Verification');
-        core.info('   🖥️  TEE Server Attestation');
-        core.info('');
-        core.endGroup();
+        core.info('✅ Deployment Complete');
+        core.info(`Version: ${result.blockchainTransaction.new_version} | Gas: ${(Number(result.blockchainTransaction.gas_used) / 1_000_000_000).toFixed(4)} SUI`);
+        core.info(`Transaction: https://suiscan.xyz/${inputs.network}/tx/${result.blockchainTransaction.digest}`);
+        core.info(`Site: https://${inputs.domain}`);
+        core.info('🔐 Flow: TEE Attestation (On-Chain Verified)');
+        debugLog('Complete deployment result', {
+            files: result.filesManifest.total_files,
+            size_kb: (result.filesManifest.total_size_bytes / 1024).toFixed(1),
+            version: result.blockchainTransaction.new_version,
+            gas_mist: result.blockchainTransaction.gas_used,
+            content_quilt: result.walrusUpload.content_quilt_id,
+            metadata_quilt: result.walrusUpload.metadata_quilt_id,
+            tee_request: result.teeVerification.request_id
+        });
     }
     catch (error) {
+        // Handle specific error types with user-friendly messages
+        if (error instanceof walrus_client_1.WalrusError) {
+            core.error(`\n❌ Walrus Upload Failed (${error.code})`);
+            core.error(error.message);
+            core.error('\nTroubleshooting:');
+            core.error('  - Check Walrus publisher endpoint is accessible');
+            core.error('  - Verify build directory contains valid files');
+            core.error('  - Ensure network connectivity is stable');
+            core.setFailed(`Walrus upload failed: ${error.code}`);
+            return;
+        }
+        if (error instanceof sui_client_1.SuiError) {
+            core.error(`\n❌ Blockchain Transaction Failed (${error.code})`);
+            core.error(error.message);
+            switch (error.code) {
+                case 'INSUFFICIENT_GAS':
+                    core.error('\nAction Required:');
+                    core.error('  Testnet: Get free SUI from https://faucet.sui.io');
+                    core.error('  Mainnet: Buy SUI and send to your wallet');
+                    core.error('  Recommended: 0.1 SUI for 10 deployments');
+                    break;
+                case 'DOMAIN_NOT_REGISTERED':
+                    core.error('\nAction Required:');
+                    core.error('  1. npm install -g @cryptoguard/cli');
+                    core.error('  2. cryptoguard register YOUR_DOMAIN');
+                    core.error('  3. Update SUI_REGISTRY_ID variable');
+                    core.error('  4. Re-run this workflow');
+                    break;
+                case 'UNAUTHORIZED':
+                    core.error('\nAction Required:');
+                    core.error('  - Verify PRIVATE_KEY secret matches registration key');
+                    core.error('  - Check you own this domain on-chain');
+                    break;
+                case 'VERSION_CONFLICT':
+                    core.error('\nAction Required:');
+                    core.error('  - Wait for concurrent deployment to complete');
+                    core.error('  - Re-run this workflow');
+                    break;
+                case 'INVALID_PRIVATE_KEY':
+                    core.error('\nAction Required:');
+                    core.error('  - Verify PRIVATE_KEY is 64-char hex (with or without 0x)');
+                    core.error('  - Example: 0x1234567890abcdef...');
+                    break;
+            }
+            core.setFailed(`Blockchain error: ${error.code}`);
+            return;
+        }
+        // Generic error
         const errorMessage = error instanceof Error ? error.message : String(error);
-        core.error(`Deployment failed: ${errorMessage}`);
+        core.error(`\n❌ Deployment Failed`);
+        core.error(errorMessage);
         core.setFailed(errorMessage);
     }
 }
@@ -98255,19 +98408,33 @@ async function run() {
  * Parse and validate action inputs
  */
 function parseInputs() {
+    const network = core.getInput('network') || 'testnet';
+    // Get feature flags from action inputs
+    const featureFlagInputs = {
+        verbose_attestation: core.getInput('verbose_attestation') || 'false',
+    };
+    const featureFlags = (0, feature_flags_1.getFeatureFlags)(featureFlagInputs);
     const inputs = {
         domain: core.getInput('domain', { required: true }),
         buildDir: core.getInput('build-dir', { required: true }),
-        network: core.getInput('network') || 'testnet',
-        domainVerifyHash: process.env.CRYPTOGUARD_DOMAIN_HASH || '',
+        network,
         privateKey: process.env.PRIVATE_KEY || process.env.ED25519_PRIVATE_KEY || '',
         teeServerUrl: 'https://binary-transparency-dev.up.railway.app/api/v1',
-        debugMode: core.getInput('debug') === 'true' || process.env.CRYPTOGUARD_DEBUG === 'true'
+        suiRpcUrl: core.getInput('sui-rpc-url') ||
+            (network === 'mainnet' ? 'https://fullnode.mainnet.sui.io:443' : 'https://fullnode.testnet.sui.io:443'),
+        registryId: core.getInput('registry-id', { required: true }),
+        walrusPublisherUrl: core.getInput('walrus-publisher-url') ||
+            (network === 'mainnet' ? 'https://publisher.walrus.space' : 'https://publisher.walrus-testnet.walrus.space'),
+        walrusAggregatorUrl: core.getInput('walrus-aggregator-url') ||
+            (network === 'mainnet' ? 'https://aggregator.walrus.space' : 'https://aggregator.walrus-testnet.walrus.space'),
+        gasBudget: core.getInput('gas-budget') || '10000000',
+        debugMode: core.getInput('debug') === 'true' || process.env.CRYPTOGUARD_DEBUG === 'true',
+        // TEE Attestation Flow inputs
+        trustedTeeRegistryId: core.getInput('trusted_tee_registry_id') || '',
+        verboseAttestation: featureFlags.verboseAttestationLogging,
+        expectedEnclaveMeasurement: process.env.EXPECTED_ENCLAVE_MEASUREMENT || undefined,
     };
     // Validate required environment variables
-    if (!inputs.domainVerifyHash) {
-        throw new Error('CRYPTOGUARD_DOMAIN_HASH environment variable is required');
-    }
     if (!inputs.privateKey) {
         throw new Error('PRIVATE_KEY environment variable is required (ED25519_PRIVATE_KEY also supported for backwards compatibility)');
     }
@@ -98276,415 +98443,404 @@ function parseInputs() {
     if (!domainRegex.test(inputs.domain)) {
         throw new Error(`Invalid domain format: ${inputs.domain}`);
     }
+    // Validate feature flags
+    const flagValidation = (0, feature_flags_1.validateFeatureFlags)(featureFlags);
+    if (flagValidation.warnings.length > 0) {
+        for (const warning of flagValidation.warnings) {
+            core.warning(`Feature flag warning: ${warning}`);
+        }
+    }
+    // Validate TEE Registry ID is set
+    if (!inputs.trustedTeeRegistryId) {
+        core.warning('trusted_tee_registry_id is not set. ' +
+            'The action will attempt to use TRUSTED_TEE_REGISTRY_ID environment variable.');
+    }
     return inputs;
 }
 /**
- * Execute the complete GitHub OIDC deployment workflow
+ * Execute the complete user-based deployment workflow
+ * Throws on any error - no partial deployments
  */
 async function executeDeployment(inputs) {
-    try {
-        debugLog('Starting executeDeployment function', {
-            domain: inputs.domain,
-            buildDir: inputs.buildDir,
-            network: inputs.network,
-            debugMode: inputs.debugMode
-        });
-        // Step 1: GitHub OIDC Authentication and Domain Verification
-        core.startGroup('🛡️ Step 1: GitHub OIDC Authentication and Domain Verification');
-        core.info('🔐 STEP 1: GITHUB OIDC AUTHENTICATION & DOMAIN VERIFICATION');
-        core.info('-'.repeat(50));
-        core.info('🔧 Initializing GitHub Attestation Client...');
-        debugLog('GitHub Attestation Client configuration', {
-            domain_verify_hash: inputs.domainVerifyHash ? `${inputs.domainVerifyHash.substring(0, 16)}...` : 'Not provided',
-            private_key: inputs.privateKey ? `${inputs.privateKey.substring(0, 16)}...` : 'Not provided'
-        });
-        const githubClient = new github_attestation_client_1.GitHubAttestationClient({
-            domain_verify_hash: inputs.domainVerifyHash,
-            private_key: inputs.privateKey
-        });
-        core.info('✅ GitHub Attestation Client initialized');
-        // Create domain ownership message to match CLI register command format
-        const domainOwnershipMessage = `CryptoGuard Domain Ownership: ${inputs.domain}`;
-        core.info(`📝 Generating domain ownership signature...`);
-        core.info(`   📄 Message: "${domainOwnershipMessage}"`);
-        const domainSignature = await (0, crypto_utils_1.signMessage)(domainOwnershipMessage, inputs.privateKey);
-        core.info(`   🔏 Signature: ${domainSignature.substring(0, 32)}...`);
-        core.info('🔍 Verifying domain ownership with GitHub OIDC...');
-        const domainVerification = await githubClient.verifyDomainOwnership({
-            domain: inputs.domain,
-            signature: domainSignature
-        });
-        if (!domainVerification.verified) {
-            core.error('❌ Domain verification failed!');
-            core.error(`   Error: ${domainVerification.error}`);
-            core.endGroup();
-            return {
-                success: false,
-                error: `Domain verification failed: ${domainVerification.error}`
-            };
-        }
-        const githubAttestation = domainVerification.github_attestation;
-        core.info('✅ Domain verification successful!');
-        core.info(`   🆔 Attestation Hash: ${githubAttestation.hash}`);
-        core.info(`   📋 Attestation Signature: ${githubAttestation.signature?.substring(0, 32)}...`);
-        core.info(`   🕐 Verification Time: ${new Date().toISOString()}`);
-        core.endGroup();
-        // Step 2: File-Level Integrity Manifest Generation
-        core.startGroup('📋 Step 2: File-Level Integrity Manifest Generation');
-        core.info('📁 STEP 2: FILE-LEVEL INTEGRITY MANIFEST GENERATION');
-        core.info('-'.repeat(50));
-        core.info(`🔍 Scanning build directory: ${inputs.buildDir}`);
-        const manifestOptions = {
-            maxFiles: 10000,
-            parallelProcessing: true,
-            includeMeta: true,
-            domain: inputs.domain
-        };
-        core.info('⚙️  Manifest generation options:');
-        core.info(`   📊 Max Files: ${manifestOptions.maxFiles}`);
-        core.info(`   🚀 Parallel Processing: ${manifestOptions.parallelProcessing}`);
-        core.info(`   📝 Include Metadata: ${manifestOptions.includeMeta}`);
-        debugLog('File manifest generation options', manifestOptions);
-        const startTime = Date.now();
-        const filesManifest = await (0, file_utils_1.generateFileManifest)(inputs.buildDir, manifestOptions);
-        const processingTime = Date.now() - startTime;
-        core.info('✅ File manifest generation completed!');
-        core.info('📊 MANIFEST SUMMARY:');
-        core.info(`   📁 Total Files: ${filesManifest.total_files}`);
-        core.info(`   💾 Total Size: ${(filesManifest.total_size_bytes / 1024).toFixed(1)} KB`);
-        core.info(`   ⏱️  Processing Time: ${processingTime}ms`);
-        core.info(`   🏷️  Manifest Hash: ${filesManifest.manifest_hash?.substring(0, 32) || 'N/A'}...`);
-        debugLog('Generated files manifest structure', {
-            total_files: filesManifest.total_files,
-            total_size_bytes: filesManifest.total_size_bytes,
-            files_sample: filesManifest.files.slice(0, 3).map(file => ({
-                path: file.path,
-                content_hash: file.content_hash?.substring(0, 16) + '...',
-                size_bytes: file.size_bytes,
-                content_type: file.content_type,
-                last_modified: file.last_modified,
-                encoding: file.encoding
-            })),
-            manifest_metadata: {
-                created_at: filesManifest.created_at,
-                manifest_hash: filesManifest.manifest_hash?.substring(0, 32) + '...'
-            }
-        });
-        // Show all files in manifest
-        if (filesManifest.files && filesManifest.files.length > 0) {
-            core.info(`📄 All files in manifest (${filesManifest.files.length} total):`);
-            filesManifest.files.forEach((file, index) => {
-                const sizeKB = (file.size_bytes / 1024).toFixed(1);
-                core.info(`   ${index + 1}. ${file.path} (${sizeKB} KB)`);
-                core.info(`      🔗 Hash: ${file.content_hash.substring(0, 16)}...`);
-            });
-        }
-        core.endGroup();
-        // Step 2.5: Manifest Quilt Preparation (NO WALRUS UPLOAD!)
-        core.startGroup('📦 Step 2.5: Manifest Quilt Preparation');
-        core.info('📦 STEP 2.5: PREPARING MANIFEST QUILT');
-        core.info('-'.repeat(50));
-        core.info('ℹ️  GitHub Action prepares quilt as JSON - Verification server uploads to Walrus');
-        core.info('');
-        let manifestQuilt;
-        let manifestQuiltSize = 0;
-        try {
-            const manifestQuiltStart = Date.now();
-            manifestQuilt = (0, file_utils_1.buildManifestQuilt)(inputs.domain, filesManifest, {
-                buildTimestamp: filesManifest.timestamp,
-                githubRepo: `${github.context.repo.owner}/${github.context.repo.repo}`,
-                commitSha: github.context.sha,
-                workflowRef: github.context.ref,
-                deploymentTarget: 'walrus'
-            });
-            // Validate quilt
-            (0, file_utils_1.validateQuilt)(manifestQuilt);
-            const manifestQuiltTime = Date.now() - manifestQuiltStart;
-            manifestQuiltSize = Buffer.byteLength(JSON.stringify(manifestQuilt), 'utf8');
-            core.info('✅ Manifest quilt prepared successfully!');
-            core.info('📊 MANIFEST QUILT SUMMARY:');
-            core.info(`   📋 Type: ${manifestQuilt.quilt_type}`);
-            core.info(`   🔢 Version: ${manifestQuilt.quilt_version}`);
-            core.info(`   💾 Size: ${(manifestQuiltSize / 1024).toFixed(1)} KB`);
-            core.info(`   📁 Files: ${filesManifest.total_files} (hashes in attestation)`);
-            core.info(`   🔗 Hash: ${manifestQuilt.quilt_hash}`);
-            core.info(`   ⏱️  Preparation Time: ${manifestQuiltTime}ms`);
-            debugLog('Manifest quilt structure', {
-                type: manifestQuilt.quilt_type,
-                version: manifestQuilt.quilt_version,
-                files_count: filesManifest.total_files,
-                size_kb: (manifestQuiltSize / 1024).toFixed(1),
-                hash: manifestQuilt.quilt_hash,
-                domain: manifestQuilt.domain,
-                metadata: manifestQuilt.metadata
-            });
-        }
-        catch (error) {
-            core.error('❌ Manifest quilt preparation failed!');
-            core.error(`   Error: ${error.message}`);
-            core.endGroup();
-            return {
-                success: false,
-                error: `Manifest quilt preparation failed: ${error.message}`
-            };
-        }
-        core.endGroup();
-        // Step 3: Sigstore-Attested SLSA Provenance Generation
-        core.startGroup('🔏 Step 3: Sigstore-Attested SLSA Provenance Generation');
-        core.info('🛡️ STEP 3: SIGSTORE-ATTESTED SLSA PROVENANCE GENERATION');
-        core.info('-'.repeat(50));
-        core.info('📜 Creating SLSA v1.1 provenance document...');
-        const slsaProvenance = (0, provenance_1.createSLSAProvenanceV11)(filesManifest, github.context);
-        core.info('📋 SLSA v1.1 Provenance Details:');
-        core.info(`   📋 Subject Name: ${slsaProvenance.subject?.[0]?.name || 'N/A'}`);
-        core.info(`   🔗 Predicate Type: ${slsaProvenance.predicateType}`);
-        core.info(`   👤 Builder ID: ${slsaProvenance.predicate?.runDetails?.builder?.id || 'N/A'}`);
-        core.info(`   🏗️ Build Type: ${slsaProvenance.predicate?.buildDefinition?.buildType || 'N/A'}`);
-        core.info(`   🕐 Build Start Time: ${slsaProvenance.predicate?.runDetails?.metadata?.startedOn || new Date().toISOString()}`);
-        const githubContext = {
-            actor: github.context.actor,
-            workflow: github.context.workflow,
+    debugLog('Starting user-based executeDeployment function', {
+        domain: inputs.domain,
+        buildDir: inputs.buildDir,
+        network: inputs.network,
+        suiRpcUrl: inputs.suiRpcUrl,
+        registryId: inputs.registryId,
+        walrusPublisherUrl: inputs.walrusPublisherUrl,
+        debugMode: inputs.debugMode
+    });
+    // Step 1: GitHub OIDC Authentication
+    core.info('Step 1: GitHub OIDC Authentication');
+    const githubClient = new github_attestation_client_1.GitHubAttestationClient({
+        private_key: inputs.privateKey
+    });
+    const domainOwnershipMessage = `CryptoGuard Domain Ownership: ${inputs.domain}`;
+    const domainSignature = await (0, crypto_utils_1.signMessage)(domainOwnershipMessage, inputs.privateKey);
+    const publicKey = await (0, crypto_utils_1.getPublicKeyFromPrivate)(inputs.privateKey);
+    debugLog('Domain signature generated', {
+        message: domainOwnershipMessage,
+        signature: domainSignature.substring(0, 32) + '...',
+        publicKey: publicKey.substring(0, 32) + '...'
+    });
+    const domainVerification = await githubClient.verifyDomainOwnership({
+        domain: inputs.domain,
+        signature: domainSignature,
+        publicKey: publicKey
+    });
+    if (!domainVerification.verified) {
+        throw new Error(`Domain verification failed: ${domainVerification.error}`);
+    }
+    const githubAttestation = domainVerification.github_attestation;
+    core.info(`✓ Authenticated`);
+    debugLog('GitHub attestation', {
+        timestamp: githubAttestation.timestamp,
+        run_id: githubAttestation.run_id,
+        repository: githubAttestation.repository,
+        workflow: githubAttestation.workflow
+    });
+    // Step 2: File Manifest
+    core.info('Step 2: Generate File Manifest');
+    const manifestOptions = {
+        maxFiles: 10000,
+        parallelProcessing: true,
+        includeMeta: true,
+        domain: inputs.domain
+    };
+    const filesManifest = await (0, file_utils_1.generateFileManifest)(inputs.buildDir, manifestOptions);
+    core.info(`✓ ${filesManifest.total_files} files (${(filesManifest.total_size_bytes / 1024).toFixed(1)} KB)`);
+    debugLog('Files manifest', {
+        total_files: filesManifest.total_files,
+        total_size_bytes: filesManifest.total_size_bytes,
+        files: filesManifest.files.map(f => ({
+            path: f.path,
+            size: f.size_bytes,
+            hash: f.content_hash.substring(0, 16) + '...'
+        }))
+    });
+    // Step 3: SLSA Provenance
+    core.info('Step 3: Create SLSA Provenance');
+    const slsaProvenance = (0, provenance_1.createSLSAProvenanceV11)(filesManifest, github.context);
+    const githubContext = {
+        actor: github.context.actor,
+        workflow: github.context.workflow,
+        repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
+        run_id: github.context.runId
+    };
+    const attestedProvenance = await githubClient.attestProvenance({
+        provenance: slsaProvenance,
+        files_manifest: filesManifest,
+        github_context: githubContext
+    });
+    core.info(`✓ SLSA Level 3 attested`);
+    debugLog('SLSA provenance', {
+        subject: slsaProvenance.subject?.[0]?.name,
+        predicateType: slsaProvenance.predicateType,
+        builderId: slsaProvenance.predicate?.runDetails?.builder?.id,
+        cosignSignature: attestedProvenance.cosign_signature
+    });
+    // Step 4: Walrus Upload (User-Controlled)
+    core.info('Step 4: Upload to Walrus');
+    const walrusClient = new walrus_client_1.WalrusClient({
+        publisherUrl: inputs.walrusPublisherUrl,
+        aggregatorUrl: inputs.walrusAggregatorUrl,
+        timeout: 60000,
+        maxRetries: 3,
+    });
+    debugLog('Walrus client config', {
+        publisher: inputs.walrusPublisherUrl,
+        aggregator: inputs.walrusAggregatorUrl
+    });
+    // Read files
+    const filesToUpload = {};
+    for (const file of filesManifest.files) {
+        const filePath = path.join(inputs.buildDir, file.path);
+        const fileContent = await fs.readFile(filePath);
+        filesToUpload[file.path] = fileContent;
+    }
+    // Upload with two-quilt structure
+    const provenanceData = {
+        slsa_provenance: slsaProvenance,
+        attested_provenance: attestedProvenance,
+        github_context: githubContext,
+        upload_timestamp: new Date().toISOString(),
+    };
+    const quiltDeployment = await walrusClient.uploadTwoQuiltStructure(filesToUpload, provenanceData, {
+        domain: inputs.domain,
+        network: inputs.network,
+        deployment_type: 'cryptoguard-user-based',
+    });
+    // Build blob mapping
+    const blobMapping = {};
+    for (const file of quiltDeployment.contentQuilt.manifest.files) {
+        blobMapping[file.path] = file.blobId;
+    }
+    const provenanceBlob = quiltDeployment.metadataQuilt.manifest.files.find(f => f.path === 'provenance.json');
+    if (!provenanceBlob) {
+        throw new walrus_client_1.WalrusError('Provenance blob not found in metadata quilt', 'QUILT_STRUCTURE_ERROR', { metadataQuilt: quiltDeployment.metadataQuilt });
+    }
+    const totalSize = quiltDeployment.contentQuilt.totalSize + quiltDeployment.metadataQuilt.totalSize;
+    core.info(`✓ Uploaded ${quiltDeployment.contentQuilt.manifest.files.length} files (${(totalSize / 1024).toFixed(1)} KB)`);
+    core.info(`  Content: ${quiltDeployment.contentQuilt.blobId.substring(0, 12)}...`);
+    core.info(`  Metadata: ${quiltDeployment.metadataQuilt.blobId.substring(0, 12)}...`);
+    debugLog('Walrus upload complete', {
+        content_quilt: quiltDeployment.contentQuilt.blobId,
+        metadata_quilt: quiltDeployment.metadataQuilt.blobId,
+        total_files: quiltDeployment.contentQuilt.manifest.files.length,
+        total_size_kb: (totalSize / 1024).toFixed(1),
+        blob_mapping: blobMapping
+    });
+    // Step 5: TEE Verification (Read-Only)
+    core.info('Step 5: TEE Server Verification');
+    const teeClient = new tee_server_client_1.TEEServerClient({
+        server_url: inputs.teeServerUrl,
+        timeout: 300000,
+        max_retries: 3,
+        retry_delay_ms: 2000
+    });
+    const teedomainSignature = await (0, crypto_utils_1.signMessage)(domainOwnershipMessage, inputs.privateKey);
+    const manifestHash = await (0, crypto_utils_1.signMessage)(JSON.stringify(filesManifest), inputs.privateKey);
+    const teeFilesManifest = {
+        files: filesManifest.files.map((file) => ({
+            path: file.path,
+            content_hash: file.content_hash,
+            size_bytes: file.size_bytes,
+            content_type: file.content_type,
+            last_modified: file.last_modified,
+            encoding: file.encoding
+        })),
+        total_files: filesManifest.total_files,
+        total_size_bytes: filesManifest.total_size_bytes,
+        manifest_hash: manifestHash,
+        created_at: filesManifest.timestamp
+    };
+    // Construct simplified github_attestation (Phase 0 API alignment)
+    // TEE server now handles OIDC verification directly
+    const teeRequest = {
+        domain: inputs.domain,
+        domain_signature: teedomainSignature,
+        github_attestation: {
+            timestamp: new Date().toISOString(),
+            run_id: github.context.runId,
             repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
-            run_id: github.context.runId
-        };
-        core.info('🔐 Generating Sigstore attestation...');
-        core.info('📝 GitHub Context for attestation:');
-        core.info(`   👤 Actor: ${githubContext.actor}`);
-        core.info(`   🔄 Workflow: ${githubContext.workflow}`);
-        core.info(`   📦 Repository: ${githubContext.repository}`);
-        core.info(`   🆔 Run ID: ${githubContext.run_id}`);
-        const attestStartTime = Date.now();
-        const attestedProvenance = await githubClient.attestProvenance({
-            provenance: slsaProvenance,
-            files_manifest: filesManifest,
-            github_context: githubContext
+            workflow: github.context.workflow,
+            commit_sha: github.context.sha,
+            workflow_ref: github.context.ref
+        },
+        files_manifest: teeFilesManifest,
+        walrus_blob_mapping: blobMapping,
+        provenance_blob_id: provenanceBlob.blobId,
+        provenance_attestation: attestedProvenance,
+        network: inputs.network,
+        client_info: {
+            user_agent: `CryptoGuard-Action/0.2.0`,
+            github_run_id: github.context.runId.toString(),
+            github_repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
+            action_version: '0.2.0'
+        },
+        deployment_target: 'walrus'
+    };
+    debugLog('Complete TEE server request payload', {
+        domain: teeRequest.domain,
+        domain_signature: teeRequest.domain_signature?.substring(0, 32) + '...',
+        github_attestation: {
+            timestamp: teeRequest.github_attestation.timestamp,
+            run_id: teeRequest.github_attestation.run_id,
+            repository: teeRequest.github_attestation.repository,
+            workflow: teeRequest.github_attestation.workflow,
+            commit_sha: teeRequest.github_attestation.commit_sha,
+            workflow_ref: teeRequest.github_attestation.workflow_ref
+        },
+        files_manifest: {
+            files_count: teeRequest.files_manifest.files.length,
+            total_files: teeRequest.files_manifest.total_files,
+            total_size_bytes: teeRequest.files_manifest.total_size_bytes,
+            sample_files: teeRequest.files_manifest.files.slice(0, 2).map(f => ({
+                path: f.path,
+                content_hash: f.content_hash?.substring(0, 16) + '...',
+                size_bytes: f.size_bytes,
+                content_type: f.content_type,
+                last_modified: f.last_modified,
+                encoding: f.encoding
+            }))
+        },
+        provenance_attestation: {
+            cosign_signature: teeRequest.provenance_attestation?.cosign_signature?.substring(0, 32) + '...',
+            attestation_id: teeRequest.provenance_attestation?.attestation_id,
+            slsa_level: teeRequest.provenance_attestation?.slsa_level
+        },
+        network: teeRequest.network,
+        deployment_target: teeRequest.deployment_target,
+        client_info: teeRequest.client_info
+    });
+    const teeResult = await teeClient.submitDeployment(teeRequest);
+    // Fail-fast: Check TEE verification result
+    if (!teeResult.success) {
+        throw new Error(`TEE verification failed: ${teeResult.error || 'Unknown error'}`);
+    }
+    const walrusVerification = teeResult.verification_result?.walrus_verification;
+    const teeAttestation = teeResult.tee_attestation || teeResult.verification_result?.tee_attestation;
+    if (!teeAttestation) {
+        throw new Error('TEE attestation missing from verification response');
+    }
+    core.info(`✓ Verified (Domain, GitHub, Provenance, Walrus blobs)`);
+    debugLog('TEE verification result', {
+        request_id: teeResult.request_id,
+        domain_verified: teeResult.domain_verified || teeResult.verification_result?.domain_verified,
+        github_verified: teeResult.verification_result?.github_verified,
+        provenance_verified: teeResult.verification_result?.provenance_verified,
+        all_blobs_verified: walrusVerification?.all_blobs_verified,
+        attestation_hash: teeAttestation.measurement_hash.substring(0, 32) + '...'
+    });
+    // Initialize Sui client (needed for both flows)
+    const suiClient = new sui_client_1.CryptoGuardSuiClient({
+        rpcUrl: inputs.suiRpcUrl,
+        network: inputs.network,
+        registryId: inputs.registryId,
+        gasBudget: inputs.gasBudget,
+    });
+    debugLog('Sui client config', {
+        rpcUrl: inputs.suiRpcUrl,
+        network: inputs.network,
+        registryId: inputs.registryId,
+        gasBudget: inputs.gasBudget
+    });
+    // Look up domain (needed for both flows)
+    const domainRecord = await suiClient.lookupDomain(inputs.domain);
+    if (!domainRecord) {
+        throw new sui_client_1.SuiError(`Domain ${inputs.domain} is not registered.\n\nRegister first: npm install -g @cryptoguard/cli && cryptoguard register ${inputs.domain}`, 'DOMAIN_NOT_REGISTERED', { domain: inputs.domain });
+    }
+    debugLog('Domain record found', {
+        id: domainRecord.id,
+        owner: domainRecord.owner,
+        currentVersion: domainRecord.currentVersion.toString()
+    });
+    // =========================================================================
+    // Step 6: Submit TEE Attestation to Blockchain (On-Chain Verification)
+    // =========================================================================
+    core.info('Step 6: Submit TEE Attestation to Blockchain (On-Chain Verification)');
+    // Build TEE attestation request for the /attest endpoint
+    const teeAttestationRequest = {
+        domain: inputs.domain,
+        domain_signature: teedomainSignature,
+        site_record_id: domainRecord.id,
+        content_quilt_id: quiltDeployment.contentQuilt.blobId,
+        metadata_quilt_id: quiltDeployment.metadataQuilt.blobId,
+        provenance_blob_id: provenanceBlob.blobId,
+        files_manifest: {
+            manifest_hash: teeFilesManifest.manifest_hash,
+            total_files: teeFilesManifest.total_files,
+            total_size_bytes: teeFilesManifest.total_size_bytes,
+        },
+        github_context: {
+            repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
+            commit_sha: github.context.sha,
+            workflow_ref: github.context.ref,
+            run_id: github.context.runId,
+            workflow: github.context.workflow,
+        },
+        client_info: {
+            user_agent: `CryptoGuard-Action/0.2.0`,
+            action_version: '0.2.0',
+        },
+        network: inputs.network,
+    };
+    if (inputs.verboseAttestation) {
+        debugLog('TEE attestation request (verbose)', {
+            domain: teeAttestationRequest.domain,
+            site_record_id: teeAttestationRequest.site_record_id,
+            content_quilt_id: teeAttestationRequest.content_quilt_id,
+            metadata_quilt_id: teeAttestationRequest.metadata_quilt_id,
+            files_manifest: teeAttestationRequest.files_manifest,
+            github_context: teeAttestationRequest.github_context,
         });
-        const attestTime = Date.now() - attestStartTime;
-        core.info('✅ SLSA provenance attestation completed!');
-        core.info('🛡️ SIGSTORE ATTESTATION RESULTS:');
-        core.info(`   🔏 Cosign Signature: ${attestedProvenance.cosign_signature}`);
-        core.info(`   📊 Sigstore Bundle Size: ${attestedProvenance.sigstore_bundle ? JSON.stringify(attestedProvenance.sigstore_bundle).length : 0} bytes`);
-        core.info(`   ⏱️  Attestation Time: ${attestTime}ms`);
-        core.info(`   🕐 Timestamp: ${new Date().toISOString()}`);
-        core.endGroup();
-        // Step 3.5: Attestation Quilt Preparation (NO WALRUS UPLOAD!)
-        core.startGroup('🔏 Step 3.5: Attestation Quilt Preparation');
-        core.info('🛡️ STEP 3.5: PREPARING ATTESTATION QUILT');
-        core.info('-'.repeat(50));
-        core.info('ℹ️  GitHub Action prepares quilt as JSON - Verification server uploads to Walrus');
-        core.info('⚠️  IMPORTANT: Using RAW sigstore bundle (file hashes extracted on server)');
-        core.info('');
-        let attestationQuilt;
-        let attestationQuiltSize = 0;
-        try {
-            const attestationQuiltStart = Date.now();
-            // Pass RAW sigstore bundle (attestedProvenance.sigstore_bundle)
-            // This contains EVERYTHING: file hashes, signatures, certificates, provenance
-            attestationQuilt = (0, file_utils_1.buildAttestationQuilt)(inputs.domain, {
-                domainVerificationHash: inputs.domainVerifyHash,
-                domainSignature: domainSignature
-            }, {
-                run_id: github.context.runId,
-                repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
-                workflow: github.context.workflow,
-                commit_sha: github.context.sha,
-                workflow_ref: github.context.ref
-            }, attestedProvenance.sigstore_bundle // RAW sigstore bundle
-            );
-            // Validate quilt
-            (0, file_utils_1.validateQuilt)(attestationQuilt);
-            const attestationQuiltTime = Date.now() - attestationQuiltStart;
-            attestationQuiltSize = Buffer.byteLength(JSON.stringify(attestationQuilt), 'utf8');
-            core.info('✅ Attestation quilt prepared successfully!');
-            core.info('📊 ATTESTATION QUILT SUMMARY:');
-            core.info(`   📋 Type: ${attestationQuilt.quilt_type}`);
-            core.info(`   🔢 Version: ${attestationQuilt.quilt_version}`);
-            core.info(`   💾 Size: ${(attestationQuiltSize / 1024).toFixed(1)} KB`);
-            core.info(`   🔗 Hash: ${attestationQuilt.quilt_hash}`);
-            core.info(`   ⏱️  Preparation Time: ${attestationQuiltTime}ms`);
-            debugLog('Attestation quilt structure', {
-                type: attestationQuilt.quilt_type,
-                version: attestationQuilt.quilt_version,
-                has_github: !!attestationQuilt.github_attestation,
-                has_sigstore_bundle: !!attestationQuilt.sigstore_attestation_bundle,
-                has_domain_verification: !!attestationQuilt.domain_verification,
-                size_kb: (attestationQuiltSize / 1024).toFixed(1),
-                hash: attestationQuilt.quilt_hash,
-                domain: attestationQuilt.domain
-            });
-        }
-        catch (error) {
-            core.error('❌ Attestation quilt preparation failed!');
-            core.error(`   Error: ${error.message}`);
-            core.endGroup();
-            return {
-                success: false,
-                error: `Attestation quilt preparation failed: ${error.message}`
-            };
-        }
-        core.endGroup();
-        // Step 4: TEE Server Processing (Walrus Upload + Registry Update)
-        core.startGroup('🛡️ Step 4: TEE Server Processing');
-        core.info('🖥️ STEP 4: TEE SERVER PROCESSING');
-        core.info('-'.repeat(50));
-        core.info(`🔗 Connecting to TEE server: ${inputs.teeServerUrl}`);
-        const teeClientConfig = {
-            server_url: inputs.teeServerUrl,
-            timeout: 300000, // 5 minutes
-            max_retries: 3,
-            retry_delay_ms: 2000
-        };
-        core.info('⚙️  TEE Client Configuration:');
-        core.info(`   🌐 Server URL: ${teeClientConfig.server_url}`);
-        core.info(`   ⏱️  Timeout: ${teeClientConfig.timeout / 1000}s`);
-        core.info(`   🔄 Max Retries: ${teeClientConfig.max_retries}`);
-        core.info(`   ⏳ Retry Delay: ${teeClientConfig.retry_delay_ms}ms`);
-        debugLog('TEE Server Client configuration', teeClientConfig);
-        const teeClient = new tee_server_client_1.TEEServerClient(teeClientConfig);
-        // Create domain signature for TEE server using same format as CLI register command
-        core.info('🔏 Generating domain signature for TEE server...');
-        debugLog('Domain ownership message for TEE signature', {
-            message: domainOwnershipMessage,
-            messageLength: domainOwnershipMessage.length
-        });
-        const teedomainSignature = await (0, crypto_utils_1.signMessage)(domainOwnershipMessage, inputs.privateKey);
-        core.info(`   🔏 Domain Signature: ${teedomainSignature.substring(0, 32)}...`);
-        debugLog('Generated TEE domain signature', {
-            signature: teedomainSignature.substring(0, 64) + '...',
-            signatureLength: teedomainSignature.length
-        });
-        // Transform files manifest to match TEE server expected format
-        core.info('🔄 Preparing files manifest for TEE server...');
-        const manifestHash = await (0, crypto_utils_1.signMessage)(JSON.stringify(filesManifest), inputs.privateKey);
-        const teeFilesManifest = {
-            files: filesManifest.files.map(file => ({
-                path: file.path,
-                content_hash: file.content_hash,
-                size_bytes: file.size_bytes,
-                content_type: file.content_type,
-                last_modified: file.last_modified,
-                encoding: file.encoding
-            })),
-            total_files: filesManifest.total_files,
-            total_size_bytes: filesManifest.total_size_bytes,
-            manifest_hash: manifestHash,
-            created_at: filesManifest.timestamp
-        };
-        core.info('📋 TEE Files Manifest prepared:');
-        core.info(`   📁 Files: ${teeFilesManifest.total_files}`);
-        core.info(`   💾 Size: ${(teeFilesManifest.total_size_bytes / 1024).toFixed(1)} KB`);
-        core.info(`   🔗 Manifest Hash: ${manifestHash.substring(0, 32)}...`);
-        const teeRequest = {
-            domain: inputs.domain,
-            // Send quilts as JSON objects (NOT blob IDs!)
-            // The verification server will upload these to Walrus
-            manifest_quilt: manifestQuilt,
-            attestation_quilt: attestationQuilt,
-            network: inputs.network,
-            client_info: {
-                user_agent: `CryptoGuard-Action/0.2.0`,
-                github_run_id: github.context.runId.toString(),
-                github_repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
-                action_version: '0.2.0'
-            }
-        };
-        core.info('📤 Sending quilts to verification server for Walrus upload...');
-        core.info(`   📊 Total request size: ${JSON.stringify(teeRequest).length} bytes`);
-        core.info(`   📦 Manifest quilt size: ${manifestQuiltSize} bytes`);
-        core.info(`   🔏 Attestation quilt size: ${attestationQuiltSize} bytes`);
-        debugLog('TEE server request with quilts (sizes only)', {
-            domain: teeRequest.domain,
-            manifest_quilt_size_kb: (manifestQuiltSize / 1024).toFixed(1),
-            attestation_quilt_size_kb: (attestationQuiltSize / 1024).toFixed(1),
-            manifest_quilt_hash: manifestQuilt.quilt_hash,
-            attestation_quilt_hash: attestationQuilt.quilt_hash,
-            network: teeRequest.network,
-            client_info: teeRequest.client_info
-        });
-        const teeStartTime = Date.now();
-        const teeResult = await teeClient.submitDeployment(teeRequest);
-        const teeProcessTime = Date.now() - teeStartTime;
-        // Verification server returns single quilt blob ID after uploading to Walrus
-        if (teeResult.success && teeResult.quilt?.blob_id) {
-            core.info(`✅ Quilt uploaded to Walrus: ${teeResult.quilt.blob_id}`);
-            core.info(`   (Contains both manifest.json and attestation.json)`);
-        }
-        debugLog('Complete TEE server response', {
-            success: teeResult.success,
+    }
+    // Request TEE attestation from server
+    core.info('   Requesting TEE attestation...');
+    const attestationResponse = await teeClient.requestAttestation(teeAttestationRequest);
+    if (!(0, tee_attestation_1.isSuccessfulAttestation)(attestationResponse)) {
+        const errorMsg = attestationResponse.error_code
+            ? (0, tee_attestation_1.getErrorMessage)(attestationResponse.error_code)
+            : attestationResponse.error || 'Unknown error';
+        throw new Error(`TEE attestation failed: ${errorMsg}`);
+    }
+    const teeAttestationProof = attestationResponse.attestation;
+    debugLog('TEE attestation received', {
+        payload_hash: teeAttestationProof.payload.files_manifest_hash,
+        signature: teeAttestationProof.signature.substring(0, 32) + '...',
+        measurement: teeAttestationProof.enclave_measurement.substring(0, 32) + '...',
+        public_key: teeAttestationProof.public_key.substring(0, 32) + '...',
+    });
+    if (inputs.verboseAttestation && attestationResponse.verification_summary) {
+        core.info('   Verification summary:');
+        core.info(`     Domain verified: ${attestationResponse.verification_summary.domain_verified}`);
+        core.info(`     GitHub verified: ${attestationResponse.verification_summary.github_verified}`);
+        core.info(`     Provenance verified: ${attestationResponse.verification_summary.provenance_verified}`);
+        core.info(`     Walrus blobs verified: ${attestationResponse.verification_summary.walrus_blobs_verified}`);
+    }
+    // Submit attestation to smart contract for on-chain verification
+    core.info('   Submitting attestation to smart contract...');
+    const attestationTxResult = await suiClient.updateSiteWithTEEAttestation(inputs.privateKey, domainRecord.id, teeAttestationProof, {
+        maxAttestationAge: 300, // 5 minutes
+        expectedEnclaveMeasurement: inputs.expectedEnclaveMeasurement,
+        trustedTeeRegistryId: inputs.trustedTeeRegistryId || undefined,
+    });
+    if (!attestationTxResult.success) {
+        throw new Error(`On-chain TEE verification failed: ${attestationTxResult.error}`);
+    }
+    const txResult = {
+        digest: attestationTxResult.transactionDigest,
+        status: attestationTxResult.success ? 'success' : 'failure',
+        newVersion: String(attestationTxResult.newVersion),
+        gasUsed: attestationTxResult.gasUsed,
+    };
+    const onChainVerification = attestationTxResult.onChainVerification;
+    core.info(`✓ TEE attestation verified on-chain`);
+    core.info(`  Version: ${domainRecord.currentVersion} → ${txResult.newVersion}`);
+    core.info(`  Gas: ${(Number(txResult.gasUsed) / 1_000_000_000).toFixed(4)} SUI`);
+    core.info(`  TX: ${txResult.digest.substring(0, 16)}...`);
+    debugLog('TEE attestation blockchain result', {
+        digest: txResult.digest,
+        status: txResult.status,
+        newVersion: txResult.newVersion,
+        gasUsed: txResult.gasUsed,
+        onChainVerification,
+        explorer: `https://suiscan.xyz/${inputs.network}/tx/${txResult.digest}`
+    });
+    // Return deployment result
+    return {
+        githubAttestation,
+        filesManifest,
+        walrusUpload: {
+            blob_mapping: blobMapping,
+            provenance_blob_id: provenanceBlob.blobId,
+            total_blobs: Object.keys(blobMapping).length,
+            total_size: totalSize,
+            content_quilt_id: quiltDeployment.contentQuilt.blobId,
+            metadata_quilt_id: quiltDeployment.metadataQuilt.blobId,
+        },
+        teeVerification: {
             request_id: teeResult.request_id,
-            domain_verified: teeResult.domain_verified,
-            verification_timestamp: teeResult.verification_timestamp,
-            quilt: teeResult.quilt,
-            version_history: teeResult.version_history,
-            registry_update: teeResult.registry_update,
+            domain_verified: teeResult.domain_verified || teeResult.verification_result?.domain_verified || false,
+            github_verified: teeResult.verification_result?.github_verified || false,
+            provenance_verified: teeResult.verification_result?.provenance_verified || false,
             tee_attestation: {
-                measurement_hash: teeResult.tee_attestation?.measurement_hash?.substring(0, 32) + '...',
-                attestation_signature: teeResult.tee_attestation?.attestation_signature?.substring(0, 32) + '...',
-                timestamp: teeResult.tee_attestation?.timestamp
+                measurement_hash: teeAttestation.measurement_hash,
+                attestation_signature: teeAttestation.attestation_signature,
+                timestamp: teeAttestation.timestamp,
             },
-            error: teeResult.error
-        });
-        core.info('✅ TEE processing completed successfully!');
-        core.info('🎯 TEE SERVER RESULTS:');
-        core.info(`   🆔 Request ID: ${teeResult.request_id}`);
-        core.info(`   ✅ Domain Verified: ${teeResult.domain_verified}`);
-        core.info(`   ⏱️  Processing Time: ${teeProcessTime}ms`);
-        // Quilt Upload Details
-        if (teeResult.quilt) {
-            core.info('🐋 WALRUS QUILT STORAGE:');
-            core.info(`   📦 Quilt Blob ID: ${teeResult.quilt.blob_id}`);
-            core.info(`   💾 Size: ${(teeResult.quilt.size_bytes / 1024).toFixed(1)} KB`);
-            core.info(`   ⏱️  Upload Duration: ${teeResult.quilt.upload_duration_ms}ms`);
-            core.info(`   📄 Contains: manifest.json + attestation.json`);
-        }
-        // Version History Details
-        if (teeResult.version_history) {
-            core.info('📊 VERSION HISTORY:');
-            core.info(`   🔢 New Version: ${teeResult.version_history.new_version}`);
-            core.info(`   🔢 Previous Version: ${teeResult.version_history.previous_version}`);
-        }
-        // Registry Update Details
-        if (teeResult.registry_update) {
-            core.info('📋 SUI REGISTRY UPDATE:');
-            core.info(`   🔢 Registry Version: ${teeResult.registry_update.new_version}`);
-            core.info(`   🔗 Transaction ID: ${teeResult.registry_update.transaction_id}`);
-            core.info(`   💰 Gas Used: ${teeResult.registry_update.gas_used || 'N/A'}`);
-        }
-        // TEE Attestation Details
-        if (teeResult.tee_attestation) {
-            core.info('🛡️ TEE ATTESTATION:');
-            core.info(`   🔗 Measurement Hash: ${teeResult.tee_attestation.measurement_hash}`);
-            core.info(`   🔏 Attestation Signature: ${teeResult.tee_attestation.attestation_signature.substring(0, 32)}...`);
-            core.info(`   🕐 Timestamp: ${teeResult.tee_attestation.timestamp}`);
-        }
-        core.endGroup();
-        return {
-            success: true,
-            githubAttestation,
-            filesManifest,
-            teeDeployment: {
-                request_id: teeResult.request_id,
-                walrus_blobs: {
-                    quilt: teeResult.quilt?.blob_id || ''
-                },
-                provenance_blob_id: teeResult.quilt?.blob_id || '',
-                registry_version: teeResult.registry_update?.new_version || '0',
-                transaction_id: teeResult.registry_update?.transaction_id || '',
-                tee_attestation: {
-                    measurement_hash: teeResult.tee_attestation?.measurement_hash || '',
-                    attestation_signature: teeResult.tee_attestation?.attestation_signature || '',
-                    timestamp: teeResult.tee_attestation?.timestamp || new Date().toISOString()
-                }
-            }
-        };
-    }
-    catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        return {
-            success: false,
-            error: errorMessage
-        };
-    }
+        },
+        blockchainTransaction: {
+            digest: txResult.digest,
+            status: txResult.status,
+            new_version: txResult.newVersion || '0',
+            gas_used: txResult.gasUsed || 0,
+            site_record_id: domainRecord.id,
+        },
+        teeAttestationProof,
+        onChainVerification,
+    };
 }
 /**
  * Create GitHub integrations (deployment status, check runs, comments)
@@ -98703,33 +98859,44 @@ async function createGitHubIntegrations(inputs, result) {
                 ...github.context.repo,
                 deployment_id: github.context.payload.deployment.id,
                 state: 'success',
-                description: 'CryptoGuard V1.0 verification complete with GitHub OIDC attestation',
+                description: 'CryptoGuard User-Based deployment complete - You own your domain!',
                 environment_url: `https://${inputs.domain}`,
-                log_url: `https://walrus.site/${result.teeDeployment?.provenance_blob_id}`
+                log_url: result.blockchainTransaction?.digest
+                    ? `https://suiscan.xyz/${inputs.network}/tx/${result.blockchainTransaction.digest}`
+                    : `https://walrus.site/${result.walrusUpload?.provenance_blob_id}`
             });
         }
         // Create comprehensive check run
         await octokit.rest.checks.create({
             ...github.context.repo,
-            name: 'CryptoGuard GitHub OIDC Verification',
+            name: 'CryptoGuard User-Based Deployment',
             head_sha: github.context.sha,
             status: 'completed',
             conclusion: 'success',
             output: {
-                title: 'GitHub OIDC Verified Deployment Complete',
+                title: 'User-Based Deployment Complete - You Own Your Domain!',
                 summary: `
-## 🛡️ GitHub OIDC-Attested Verification Results
+## 🔑 User-Based Deployment Results
 
 | Component | Status | Details |
 |-----------|---------|---------|
-| Domain Verification | ✅ Verified | GitHub Attestation: \`${result.githubAttestation?.hash.substring(0, 12)}...\` |
+| Domain Verification | ✅ Verified | GitHub Attestation: \`${result.githubAttestation?.repository}@${result.githubAttestation?.run_id}\` |
 | Files Processed | ✅ Complete | ${result.filesManifest?.total_files} files, ${Math.round(result.filesManifest?.total_size_bytes / 1024)}KB |
 | SLSA Provenance | ✅ Level 3 | Sigstore-signed with transparency log |
-| Walrus Storage | ✅ Certified | All blobs certified with GitHub attestation |
-| Registry Update | ✅ Atomic | Version ${result.teeDeployment?.registry_version} deployed |
+| Walrus Upload | ✅ User-Controlled | ${result.walrusUpload?.total_blobs} blobs uploaded by YOU |
+| TEE Verification | ✅ Verified | Read-only verification, no uploads |
+| Blockchain Transaction | ✅ User-Signed | Version ${result.blockchainTransaction?.new_version}, Gas: ${result.blockchainTransaction?.gas_used} MIST |
 
-**Verification URL**: https://walrus.site/${result.teeDeployment?.provenance_blob_id}
-**Site URL**: https://${inputs.domain}
+**🔍 Transaction**: [View on Explorer](https://suiscan.xyz/${inputs.network}/tx/${result.blockchainTransaction?.digest})
+**📜 Provenance**: [View on Walrus](https://aggregator.walrus-testnet.walrus.space/v1/${result.walrusUpload?.provenance_blob_id})
+**🌐 Site**: https://${inputs.domain}
+
+### 🔑 User-Based Architecture Benefits
+
+✅ **You own your domain** on the blockchain
+✅ **You control your storage** on Walrus
+✅ **You sign your transactions** with your private key
+✅ **Full Web3 self-sovereignty** - no admin control
         `
             }
         });
@@ -98738,19 +98905,28 @@ async function createGitHubIntegrations(inputs, result) {
             await octokit.rest.issues.createComment({
                 ...github.context.repo,
                 issue_number: github.context.issue.number,
-                body: `## 🔐 CryptoGuard V1.0 GitHub OIDC Verification Complete
+                body: `## 🔑 CryptoGuard User-Based Deployment Complete
 
-✅ **Domain**: ${inputs.domain}  
-🛡️ **GitHub Attestation**: \`${result.githubAttestation?.hash}\`  
-📦 **Files**: ${result.filesManifest?.total_files} files with individual SHA256 verification  
-🔏 **SLSA Provenance**: [Level 3 Sigstore-Attested](https://walrus.site/${result.teeDeployment?.provenance_blob_id})  
+✅ **Domain**: ${inputs.domain}
+🛡️ **GitHub Attestation**: \`${result.githubAttestation?.repository}@${result.githubAttestation?.run_id}\`
+📦 **Files**: ${result.filesManifest?.total_files} files uploaded to Walrus by YOU
+🐋 **Walrus Blobs**: ${result.walrusUpload?.total_blobs} blobs under YOUR control
+⛓️ **Blockchain Transaction**: [${result.blockchainTransaction?.digest.substring(0, 12)}...](https://suiscan.xyz/${inputs.network}/tx/${result.blockchainTransaction?.digest})
+🔢 **Version**: ${result.blockchainTransaction?.new_version}
+💰 **Gas Used**: ${result.blockchainTransaction?.gas_used} MIST
 🌐 **Live Site**: [${inputs.domain}](https://${inputs.domain})
 
-### File-Level Verification
-Browser extension users will see **🛡️ VERIFIED** status with granular file integrity checking.
+### 🔑 User-Based Architecture
 
-### GitHub OIDC Security
-All operations performed using GitHub OIDC tokens with Sigstore transparency log attestation.`
+✅ **You own your domain** - The SiteRecord is owned by YOUR wallet address
+✅ **You control your storage** - All files uploaded to Walrus by YOUR GitHub Action
+✅ **You sign your transactions** - Blockchain transaction signed with YOUR private key
+✅ **Full Web3 self-sovereignty** - No admin, no centralization, just YOU
+
+### 🛡️ Security Verification
+
+All operations verified by TEE Server with GitHub OIDC and Sigstore SLSA Level 3 attestation.
+Browser extension users will see **🛡️ VERIFIED** status.`
             });
         }
     }
@@ -98759,7 +98935,7 @@ All operations performed using GitHub OIDC tokens with Sigstore transparency log
     }
 }
 // Run the action if this file is executed directly
-if (require.main === require.cache[eval('__filename')]) {
+if (__nccwpck_require__.c[__nccwpck_require__.s] === module) {
     run();
 }
 
@@ -99939,6 +100115,632 @@ exports.TEEAttestationClient = TEEAttestationClient;
 
 /***/ }),
 
+/***/ 88759:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CryptoGuardSuiClient = exports.SuiError = void 0;
+const core = __importStar(__nccwpck_require__(50099));
+const client_1 = __nccwpck_require__(21176);
+const ed25519_1 = __nccwpck_require__(43453);
+const transactions_1 = __nccwpck_require__(25026);
+const utils_1 = __nccwpck_require__(71552);
+const attestation_serializer_1 = __nccwpck_require__(42949);
+/**
+ * Error thrown by Sui operations
+ */
+class SuiError extends Error {
+    code;
+    details;
+    constructor(message, code, details) {
+        super(message);
+        this.code = code;
+        this.details = details;
+        this.name = 'SuiError';
+    }
+}
+exports.SuiError = SuiError;
+/**
+ * Client for interacting with Sui blockchain
+ * Handles domain lookups and site data updates
+ */
+class CryptoGuardSuiClient {
+    client;
+    network;
+    packageId;
+    registryId;
+    gasBudget;
+    constructor(config) {
+        this.client = new client_1.SuiClient({ url: config.rpcUrl });
+        this.network = config.network;
+        this.packageId = config.packageId || this.getDefaultPackageId(config.network);
+        this.registryId = config.registryId;
+        this.gasBudget = BigInt(config.gasBudget || '10000000'); // 0.01 SUI default
+    }
+    /**
+     * Get default package ID for network
+     */
+    getDefaultPackageId(network) {
+        // These would be set after contract deployment
+        const packageIds = {
+            testnet: process.env.SUI_PACKAGE_ID_TESTNET || '0x0', // Placeholder
+            mainnet: process.env.SUI_PACKAGE_ID_MAINNET || '0x0', // Placeholder
+            localnet: process.env.SUI_PACKAGE_ID_LOCALNET || '0x0', // Placeholder
+        };
+        return packageIds[network] || '0x0';
+    }
+    /**
+     * Look up a domain's SiteRecord by domain name
+     * @param domain - Domain name to look up
+     * @returns Domain record information or null if not found
+     */
+    async lookupDomain(domain) {
+        try {
+            core.debug(`Looking up domain: ${domain}`);
+            // Query the registry for sites owned by any address with matching domain
+            const response = await this.client.getDynamicFields({
+                parentId: this.registryId,
+            });
+            core.debug(`Found ${response.data.length} dynamic fields in registry`);
+            // Search through dynamic fields to find matching domain
+            for (const field of response.data) {
+                try {
+                    const fieldObject = await this.client.getObject({
+                        id: field.objectId,
+                        options: {
+                            showContent: true,
+                            showOwner: true,
+                        },
+                    });
+                    if (fieldObject.data?.content?.dataType === 'moveObject') {
+                        const fields = fieldObject.data.content.fields;
+                        // Check if this is a SiteRecord with matching domain
+                        if (fields.domain === domain) {
+                            core.debug(`Found SiteRecord for domain ${domain}: ${field.objectId}`);
+                            return {
+                                id: field.objectId,
+                                domain: fields.domain,
+                                owner: fields.owner || 'unknown',
+                                currentVersion: BigInt(fields.current_version || 0),
+                            };
+                        }
+                    }
+                }
+                catch (error) {
+                    core.debug(`Error checking field ${field.objectId}: ${error instanceof Error ? error.message : String(error)}`);
+                    continue;
+                }
+            }
+            core.debug(`No SiteRecord found for domain: ${domain}`);
+            return null;
+        }
+        catch (error) {
+            throw new SuiError(`Failed to lookup domain: ${error instanceof Error ? error.message : String(error)}`, 'DOMAIN_LOOKUP_FAILED', { domain, error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+    /**
+     * Build and submit update_site_data transaction
+     * @param privateKey - User's private key (hex string with or without 0x prefix)
+     * @param siteRecordId - SiteRecord object ID
+     * @param filesManifest - Files manifest
+     * @param deploymentMetadata - Deployment metadata from TEE verification
+     * @returns Transaction result
+     */
+    async updateSiteData(privateKey, siteRecordId, filesManifest, deploymentMetadata) {
+        try {
+            // Parse private key and get user address
+            const keypair = this.parsePrivateKey(privateKey);
+            const userAddress = keypair.getPublicKey().toSuiAddress();
+            core.debug(`User address: ${userAddress}`);
+            // Verify user owns the SiteRecord
+            const siteRecord = await this.client.getObject({
+                id: siteRecordId,
+                options: { showOwner: true, showContent: true },
+            });
+            if (!siteRecord.data) {
+                throw new SuiError(`SiteRecord ${siteRecordId} not found`, 'SITE_RECORD_NOT_FOUND', { siteRecordId });
+            }
+            // Check ownership
+            const owner = siteRecord.data.owner?.AddressOwner || siteRecord.data.owner?.ObjectOwner;
+            if (owner !== userAddress) {
+                throw new SuiError(`SiteRecord owned by ${owner}, signed by ${userAddress}`, 'UNAUTHORIZED', { owner, signer: userAddress });
+            }
+            // Build transaction
+            const tx = new transactions_1.Transaction();
+            tx.setGasBudget(this.gasBudget);
+            // Prepare file manifest data
+            const filePaths = filesManifest.files.map((f) => f.path);
+            const fileHashes = filesManifest.files.map((f) => Array.from(Buffer.from(f.content_hash, 'hex')));
+            const fileSizes = filesManifest.files.map((f) => f.size_bytes);
+            const fileTypes = filesManifest.files.map((f) => f.content_type || 'application/octet-stream');
+            const fileModifiedTimes = filesManifest.files.map((f) => f.last_modified || Date.now());
+            const fileEncodings = filesManifest.files.map((f) => f.encoding || 'utf-8');
+            core.debug(`Building update_site_data tx with ${filePaths.length} files`);
+            // Call update_site_data function
+            tx.moveCall({
+                target: `${this.packageId}::domain_registry::update_site_data`,
+                arguments: [
+                    tx.object(this.registryId),
+                    tx.object(siteRecordId),
+                    tx.pure.vector('string', filePaths),
+                    tx.pure.vector('vector<u8>', fileHashes),
+                    tx.pure.vector('u64', fileSizes),
+                    tx.pure.vector('string', fileTypes),
+                    tx.pure.vector('u64', fileModifiedTimes),
+                    tx.pure.vector('string', fileEncodings),
+                    tx.pure.string(deploymentMetadata.provenance_blob_id),
+                    tx.pure.u64(deploymentMetadata.build_timestamp),
+                    tx.pure.string(deploymentMetadata.slsa_level),
+                    tx.pure.string(deploymentMetadata.github_repo),
+                    tx.pure.string(deploymentMetadata.github_commit_sha),
+                    tx.pure.string(deploymentMetadata.workflow_ref),
+                    tx.pure.string(deploymentMetadata.deployment_target),
+                    tx.object('0x6'), // Clock object
+                ],
+            });
+            // Sign and execute transaction
+            const result = await this.client.signAndExecuteTransaction({
+                transaction: tx,
+                signer: keypair,
+                options: {
+                    showEffects: true,
+                    showEvents: true,
+                    showObjectChanges: true,
+                },
+            });
+            core.debug(`Transaction submitted: ${result.digest}`);
+            // Check transaction status
+            if (result.effects?.status?.status !== 'success') {
+                const error = result.effects?.status?.error || 'Unknown error';
+                throw new SuiError(`Transaction failed: ${error}`, 'TRANSACTION_FAILED', { digest: result.digest, error });
+            }
+            // Extract new version from events
+            let newVersion = '0';
+            if (result.events) {
+                const updateEvent = result.events.find((e) => e.type.includes('::domain_registry::SiteDataUpdated'));
+                if (updateEvent && updateEvent.parsedJson) {
+                    const parsedJson = updateEvent.parsedJson;
+                    newVersion = String(parsedJson.version || parsedJson.new_version || '0');
+                }
+            }
+            // Calculate gas used
+            const gasUsed = result.effects?.gasUsed
+                ? Number(result.effects.gasUsed.computationCost) + Number(result.effects.gasUsed.storageCost)
+                : 0;
+            core.debug(`Transaction confirmed: version=${newVersion}, gas=${gasUsed} MIST`);
+            return {
+                digest: result.digest,
+                status: 'success',
+                newVersion,
+                gasUsed,
+            };
+        }
+        catch (error) {
+            if (error instanceof SuiError) {
+                throw error;
+            }
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            // Parse common error types
+            if (errorMessage.includes('Insufficient gas')) {
+                throw new SuiError('Insufficient SUI tokens in wallet for gas fees', 'INSUFFICIENT_GAS', { error: errorMessage });
+            }
+            else if (errorMessage.includes('Version mismatch') || errorMessage.includes('object version')) {
+                throw new SuiError('Concurrent deployment detected - SiteRecord version mismatch', 'VERSION_CONFLICT', { error: errorMessage });
+            }
+            else if (errorMessage.includes('not found')) {
+                throw new SuiError('SiteRecord not found on blockchain', 'SITE_RECORD_NOT_FOUND', { error: errorMessage });
+            }
+            throw new SuiError(`Transaction failed: ${errorMessage}`, 'TRANSACTION_ERROR', { error: errorMessage });
+        }
+    }
+    /**
+     * Parse private key from various formats
+     * Supports: hex string (with or without 0x prefix), base64 bech32, etc.
+     */
+    parsePrivateKey(privateKey) {
+        try {
+            // Remove whitespace
+            const key = privateKey.trim();
+            // Try hex format (with or without 0x prefix)
+            if (key.startsWith('0x') || key.startsWith('0X')) {
+                const hexKey = key.substring(2);
+                if (hexKey.length === 64) {
+                    // 32-byte private key
+                    const secretKey = Uint8Array.from(Buffer.from(hexKey, 'hex'));
+                    return ed25519_1.Ed25519Keypair.fromSecretKey(secretKey);
+                }
+            }
+            // Try raw hex without prefix
+            if (/^[0-9a-fA-F]{64}$/.test(key)) {
+                const secretKey = Uint8Array.from(Buffer.from(key, 'hex'));
+                return ed25519_1.Ed25519Keypair.fromSecretKey(secretKey);
+            }
+            // Try base64 format
+            try {
+                const decoded = (0, utils_1.fromBase64)(key);
+                if (decoded.length === 32 || decoded.length === 64) {
+                    return ed25519_1.Ed25519Keypair.fromSecretKey(decoded.slice(0, 32));
+                }
+            }
+            catch {
+                // Not base64, continue
+            }
+            // Try Sui wallet export format (suiprivkey1...)
+            if (key.startsWith('suiprivkey')) {
+                // This would need bech32 decoding - for now throw error
+                throw new Error('Bech32 private key format not yet supported. Please use hex format.');
+            }
+            throw new Error('Invalid private key format');
+        }
+        catch (error) {
+            throw new SuiError(`Failed to parse private key: ${error instanceof Error ? error.message : String(error)}`, 'INVALID_PRIVATE_KEY', { error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+    /**
+     * Get user's SUI balance
+     * @param address - User's Sui address
+     * @returns Balance in MIST
+     */
+    async getBalance(address) {
+        try {
+            const balance = await this.client.getBalance({
+                owner: address,
+            });
+            return BigInt(balance.totalBalance);
+        }
+        catch (error) {
+            throw new SuiError(`Failed to get balance: ${error instanceof Error ? error.message : String(error)}`, 'BALANCE_CHECK_FAILED', { address, error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+    // ============================================================================
+    // TEE Attestation Methods (Phase 2 - TEE Integration Plan, Step 2.3)
+    // ============================================================================
+    /**
+     * Update site data using TEE attestation.
+     * The smart contract will verify the TEE attestation before updating.
+     *
+     * This is the new TEE attestation flow where:
+     * 1. The action requests attestation from the TEE server
+     * 2. The action submits the attestation to the smart contract
+     * 3. The smart contract verifies the attestation using Nautilus library
+     * 4. The smart contract updates the site record only after successful verification
+     *
+     * @param privateKey - Owner's private key for transaction signing (hex or base64)
+     * @param siteRecordId - Sui object ID of the site record
+     * @param attestation - TEE attestation proof from the TEE server
+     * @param config - Optional configuration for attestation verification
+     * @returns Transaction result with on-chain verification details
+     * @throws SuiError if the transaction fails
+     *
+     * @example
+     * ```typescript
+     * const result = await suiClient.updateSiteWithTEEAttestation(
+     *   '0x...private_key',
+     *   '0x...site_record_id',
+     *   attestationFromTEEServer,
+     *   { maxAttestationAge: 300 }
+     * );
+     *
+     * if (result.success) {
+     *   console.log(`Updated to version ${result.newVersion}`);
+     * }
+     * ```
+     *
+     * @see TEE_ATTESTATION_INTEGRATION_PLAN.md - Phase 2, Step 2.3
+     */
+    async updateSiteWithTEEAttestation(privateKey, siteRecordId, attestation, config) {
+        try {
+            core.info('🔐 Submitting TEE attestation to smart contract for verification');
+            // Validate inputs
+            this.validateTEEAttestationInputs(siteRecordId, attestation, config);
+            // Parse private key and get user address
+            const keypair = this.parsePrivateKey(privateKey);
+            const userAddress = keypair.getPublicKey().toSuiAddress();
+            core.debug(`User address: ${userAddress}`);
+            core.debug(`Site record ID: ${siteRecordId}`);
+            core.debug(`Attestation domain: ${attestation.payload.domain}`);
+            // Verify user owns the SiteRecord
+            const siteRecord = await this.client.getObject({
+                id: siteRecordId,
+                options: { showOwner: true, showContent: true },
+            });
+            if (!siteRecord.data) {
+                throw new SuiError(`SiteRecord ${siteRecordId} not found`, 'SITE_RECORD_NOT_FOUND', { siteRecordId });
+            }
+            // Check ownership
+            const owner = siteRecord.data.owner?.AddressOwner ||
+                siteRecord.data.owner?.ObjectOwner;
+            if (owner !== userAddress) {
+                throw new SuiError(`SiteRecord owned by ${owner}, signed by ${userAddress}`, 'UNAUTHORIZED', { owner, signer: userAddress });
+            }
+            // Check attestation age if configured
+            if (config?.maxAttestationAge !== undefined) {
+                const nowMs = Date.now();
+                const ageMs = nowMs - attestation.payload.verification_timestamp;
+                const maxAgeMs = config.maxAttestationAge * 1000;
+                if (ageMs > maxAgeMs) {
+                    throw new SuiError(`Attestation is too old: ${Math.floor(ageMs / 1000)}s exceeds max ${config.maxAttestationAge}s`, 'ATTESTATION_EXPIRED', { ageSeconds: Math.floor(ageMs / 1000), maxAgeSeconds: config.maxAttestationAge });
+                }
+            }
+            // Verify expected enclave measurement if configured
+            if (config?.expectedEnclaveMeasurement) {
+                const normalizedExpected = config.expectedEnclaveMeasurement.toLowerCase().replace('0x', '');
+                const normalizedActual = attestation.enclave_measurement.toLowerCase().replace('0x', '');
+                if (normalizedExpected !== normalizedActual) {
+                    throw new SuiError('Enclave measurement does not match expected value', 'MEASUREMENT_MISMATCH', {
+                        expected: config.expectedEnclaveMeasurement,
+                        actual: attestation.enclave_measurement,
+                    });
+                }
+            }
+            // Serialize attestation for smart contract
+            core.debug('Serializing attestation proof for smart contract');
+            const serialized = (0, attestation_serializer_1.serializeAttestationProof)(attestation);
+            core.debug(`Payload size: ${serialized.payload.length} bytes`);
+            core.debug(`Signature size: ${serialized.signature.length} bytes`);
+            core.debug(`Public key size: ${serialized.publicKey.length} bytes`);
+            core.debug(`Measurement size: ${serialized.measurement.length} bytes`);
+            // Get Trusted TEE Registry ID
+            const trustedTeeRegistryId = this.getTrustedTEERegistryId(config);
+            // Build transaction
+            const tx = new transactions_1.Transaction();
+            tx.setGasBudget(this.gasBudget);
+            core.debug(`Building update_site_with_tee_attestation transaction`);
+            core.debug(`Package ID: ${this.packageId}`);
+            core.debug(`Trusted TEE Registry: ${trustedTeeRegistryId}`);
+            // Call smart contract function
+            // NOTE: Function name and argument order must match the contract implementation
+            tx.moveCall({
+                target: `${this.packageId}::site_registry::update_site_with_tee_attestation`,
+                arguments: [
+                    tx.object(siteRecordId), // site_record: &mut SiteRecord
+                    tx.pure.vector('u8', Array.from(serialized.payload)), // attestation_payload: vector<u8>
+                    tx.pure.vector('u8', Array.from(serialized.signature)), // attestation_signature: vector<u8>
+                    tx.pure.vector('u8', Array.from(serialized.publicKey)), // tee_public_key: vector<u8>
+                    tx.pure.vector('u8', Array.from(serialized.measurement)), // enclave_measurement: vector<u8>
+                    tx.object(trustedTeeRegistryId), // trusted_tee_registry: &TrustedTEERegistry
+                    tx.object('0x6'), // clock: &Clock
+                ],
+            });
+            // Sign and execute transaction
+            core.debug('Signing and executing transaction');
+            const result = await this.client.signAndExecuteTransaction({
+                signer: keypair,
+                transaction: tx,
+                options: {
+                    showEffects: true,
+                    showEvents: true,
+                    showObjectChanges: true,
+                },
+            });
+            core.debug(`Transaction submitted: ${result.digest}`);
+            // Parse and return result
+            const submissionResult = this.parseAttestationSubmissionResult(result);
+            if (submissionResult.success) {
+                core.info(`✅ TEE attestation verified on-chain`);
+                core.info(`   Transaction: ${submissionResult.transactionDigest}`);
+                core.info(`   New Version: ${submissionResult.newVersion}`);
+                core.info(`   Gas Used: ${submissionResult.gasUsed} MIST`);
+            }
+            else {
+                core.warning(`❌ TEE attestation verification failed: ${submissionResult.error}`);
+            }
+            return submissionResult;
+        }
+        catch (error) {
+            // Re-throw SuiError as-is
+            if (error instanceof SuiError) {
+                throw error;
+            }
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            // Parse common error types
+            if (errorMessage.includes('Insufficient gas')) {
+                throw new SuiError('Insufficient SUI tokens in wallet for gas fees', 'INSUFFICIENT_GAS', { error: errorMessage });
+            }
+            else if (errorMessage.includes('Version mismatch') ||
+                errorMessage.includes('object version')) {
+                throw new SuiError('Concurrent deployment detected - SiteRecord version mismatch', 'VERSION_CONFLICT', { error: errorMessage });
+            }
+            else if (errorMessage.includes('not found')) {
+                throw new SuiError('SiteRecord not found on blockchain', 'SITE_RECORD_NOT_FOUND', { error: errorMessage });
+            }
+            else if (errorMessage.includes('attestation') ||
+                errorMessage.includes('signature') ||
+                errorMessage.includes('verification')) {
+                throw new SuiError(`On-chain attestation verification failed: ${errorMessage}`, 'ATTESTATION_VERIFICATION_FAILED', { error: errorMessage });
+            }
+            throw new SuiError(`Failed to submit TEE attestation: ${errorMessage}`, 'ATTESTATION_SUBMISSION_FAILED', { siteRecordId, error: errorMessage });
+        }
+    }
+    /**
+     * Validate inputs for TEE attestation submission.
+     * @private
+     */
+    validateTEEAttestationInputs(siteRecordId, attestation, config) {
+        // Validate site record ID
+        if (!siteRecordId || typeof siteRecordId !== 'string') {
+            throw new SuiError('Site record ID is required', 'INVALID_INPUT', { field: 'siteRecordId' });
+        }
+        if (!siteRecordId.startsWith('0x')) {
+            throw new SuiError('Site record ID must be a valid Sui object ID (hex string with 0x prefix)', 'INVALID_INPUT', { field: 'siteRecordId', value: siteRecordId });
+        }
+        // Validate attestation
+        if (!attestation || typeof attestation !== 'object') {
+            throw new SuiError('Attestation is required', 'INVALID_INPUT', { field: 'attestation' });
+        }
+        if (!attestation.payload) {
+            throw new SuiError('Attestation payload is required', 'INVALID_INPUT', { field: 'attestation.payload' });
+        }
+        if (!attestation.signature) {
+            throw new SuiError('Attestation signature is required', 'INVALID_INPUT', { field: 'attestation.signature' });
+        }
+        if (!attestation.public_key) {
+            throw new SuiError('Attestation public_key is required', 'INVALID_INPUT', { field: 'attestation.public_key' });
+        }
+        if (!attestation.enclave_measurement) {
+            throw new SuiError('Attestation enclave_measurement is required', 'INVALID_INPUT', { field: 'attestation.enclave_measurement' });
+        }
+        // Validate config if provided
+        if (config?.trustedTeeRegistryId) {
+            if (!config.trustedTeeRegistryId.startsWith('0x')) {
+                throw new SuiError('Trusted TEE Registry ID must be a valid Sui object ID', 'INVALID_INPUT', { field: 'config.trustedTeeRegistryId', value: config.trustedTeeRegistryId });
+            }
+        }
+        if (config?.maxAttestationAge !== undefined && config.maxAttestationAge <= 0) {
+            throw new SuiError('maxAttestationAge must be a positive number', 'INVALID_INPUT', { field: 'config.maxAttestationAge', value: config.maxAttestationAge });
+        }
+    }
+    /**
+     * Get the Trusted TEE Registry object ID.
+     * This registry contains approved TEE public keys and measurements.
+     *
+     * Precedence:
+     * 1. config.trustedTeeRegistryId
+     * 2. Environment variable TRUSTED_TEE_REGISTRY_ID
+     * 3. Default for the current network (if available)
+     *
+     * @private
+     * @param config - Optional configuration containing the registry ID
+     * @returns Sui object ID of the Trusted TEE Registry
+     * @throws SuiError if no registry ID is available
+     */
+    getTrustedTEERegistryId(config) {
+        // Check config first
+        if (config?.trustedTeeRegistryId) {
+            return config.trustedTeeRegistryId;
+        }
+        // Check environment variable
+        const envRegistryId = process.env.TRUSTED_TEE_REGISTRY_ID;
+        if (envRegistryId) {
+            return envRegistryId;
+        }
+        // Network-specific defaults (to be populated after contract deployment)
+        const networkDefaults = {
+            testnet: process.env.TRUSTED_TEE_REGISTRY_ID_TESTNET,
+            mainnet: process.env.TRUSTED_TEE_REGISTRY_ID_MAINNET,
+            localnet: process.env.TRUSTED_TEE_REGISTRY_ID_LOCALNET,
+        };
+        const networkDefault = networkDefaults[this.network];
+        if (networkDefault) {
+            return networkDefault;
+        }
+        throw new SuiError('Trusted TEE Registry ID not configured. Set TRUSTED_TEE_REGISTRY_ID environment variable or provide trustedTeeRegistryId in config.', 'REGISTRY_NOT_CONFIGURED', { network: this.network });
+    }
+    /**
+     * Parse transaction result for attestation submission.
+     * Extracts verification details from transaction events and effects.
+     *
+     * @private
+     * @param result - Raw transaction result from Sui RPC
+     * @returns Parsed submission result with verification details
+     */
+    parseAttestationSubmissionResult(result) {
+        const effects = result.effects;
+        // Check if transaction failed
+        if (effects?.status?.status !== 'success') {
+            const errorMsg = effects?.status?.error || 'Transaction failed';
+            // Parse error to determine verification failure type
+            const onChainVerification = this.parseVerificationError(errorMsg);
+            return {
+                success: false,
+                transactionDigest: result.digest,
+                newVersion: 0,
+                gasUsed: this.calculateGasUsed(effects),
+                onChainVerification,
+                error: errorMsg,
+            };
+        }
+        // Transaction succeeded - all on-chain verifications passed
+        // Extract new version from events
+        let newVersion = 0;
+        if (result.events) {
+            const updateEvent = result.events.find((e) => e.type.includes('SiteUpdated') ||
+                e.type.includes('SiteDataUpdated') ||
+                e.type.includes('TEEAttestationVerified'));
+            if (updateEvent?.parsedJson) {
+                const parsedJson = updateEvent.parsedJson;
+                newVersion = Number(parsedJson.version || parsedJson.new_version || parsedJson.newVersion || 0);
+            }
+        }
+        return {
+            success: true,
+            transactionDigest: result.digest,
+            newVersion,
+            gasUsed: this.calculateGasUsed(effects),
+            onChainVerification: {
+                signatureValid: true,
+                measurementValid: true,
+                payloadValid: true,
+                notExpired: true,
+            },
+        };
+    }
+    /**
+     * Parse verification error message to determine which check failed.
+     * @private
+     */
+    parseVerificationError(error) {
+        const lowerError = error.toLowerCase();
+        return {
+            signatureValid: !lowerError.includes('signature'),
+            measurementValid: !lowerError.includes('measurement'),
+            payloadValid: !lowerError.includes('payload') && !lowerError.includes('deserialize'),
+            notExpired: !lowerError.includes('expired') && !lowerError.includes('expiry'),
+        };
+    }
+    /**
+     * Calculate total gas used from transaction effects.
+     * @private
+     */
+    calculateGasUsed(effects) {
+        if (!effects?.gasUsed) {
+            return 0;
+        }
+        return (Number(effects.gasUsed.computationCost || 0) +
+            Number(effects.gasUsed.storageCost || 0) -
+            Number(effects.gasUsed.storageRebate || 0));
+    }
+}
+exports.CryptoGuardSuiClient = CryptoGuardSuiClient;
+
+
+/***/ }),
+
 /***/ 80834:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -99985,6 +100787,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.TEEServerClient = exports.TEETimeoutError = exports.TEEValidationError = exports.TEECommunicationError = exports.TEEServerError = void 0;
 const core = __importStar(__nccwpck_require__(50099));
+const attestation_serializer_1 = __nccwpck_require__(42949);
 /**
  * Custom TEE Server Error classes
  */
@@ -100183,18 +100986,21 @@ class TEEServerClient {
         if (!request.domain) {
             throw new TEEValidationError('Domain is required');
         }
-        if (!request.manifest_quilt) {
-            throw new TEEValidationError('Manifest quilt is required');
+        if (!request.github_attestation) {
+            throw new TEEValidationError('GitHub attestation is required');
         }
-        if (!request.attestation_quilt) {
-            throw new TEEValidationError('Attestation quilt is required');
+        // Validate required GitHub attestation fields
+        if (!request.github_attestation.repository) {
+            throw new TEEValidationError('GitHub repository is required in attestation');
         }
-        // Validate quilt structure
-        if (!request.manifest_quilt.quilt_type || request.manifest_quilt.quilt_type !== 'manifest') {
-            throw new TEEValidationError('Invalid manifest quilt type');
+        if (!request.github_attestation.run_id) {
+            throw new TEEValidationError('GitHub run_id is required in attestation');
         }
-        if (!request.attestation_quilt.quilt_type || request.attestation_quilt.quilt_type !== 'attestation') {
-            throw new TEEValidationError('Invalid attestation quilt type');
+        if (!request.files_manifest || !request.files_manifest.files || request.files_manifest.files.length === 0) {
+            throw new TEEValidationError('Files manifest is required and must contain files');
+        }
+        if (!request.provenance_attestation || !request.provenance_attestation.sigstore_bundle) {
+            throw new TEEValidationError('SLSA provenance attestation is required');
         }
         if (!['testnet', 'mainnet'].includes(request.network)) {
             throw new TEEValidationError('Network must be either "testnet" or "mainnet"');
@@ -100211,8 +101017,8 @@ class TEEServerClient {
             throw new TEEValidationError('TEE response indicates failure but provides no error message');
         }
         if (response.success) {
-            if (!response.quilt) {
-                throw new TEEValidationError('TEE response missing quilt blob ID');
+            if (!response.walrus_upload || !response.registry_update) {
+                throw new TEEValidationError('TEE response missing required result data');
             }
         }
     }
@@ -100247,8 +101053,1106 @@ class TEEServerClient {
         }
         throw lastError;
     }
+    // =========================================================================
+    // TEE Attestation Flow Methods (Phase 2 - TEE Integration Plan)
+    // =========================================================================
+    /**
+     * Request TEE attestation for deployment verification.
+     *
+     * This is the new flow where the TEE server returns a cryptographic attestation
+     * instead of submitting transactions directly. The attestation can then be
+     * submitted to the smart contract for on-chain verification.
+     *
+     * @param request - TEE attestation request containing deployment data
+     * @returns TEE attestation response with cryptographic proof for on-chain submission
+     * @throws TEEValidationError if the request is invalid
+     * @throws TEECommunicationError if communication with TEE server fails
+     * @throws TEEServerError if TEE server returns an error
+     *
+     * @example
+     * ```typescript
+     * const response = await teeClient.requestAttestation({
+     *   domain: 'example.com',
+     *   domain_signature: '0x...',
+     *   site_record_id: '0x...',
+     *   // ... other required fields
+     * });
+     *
+     * if (response.success && response.attestation) {
+     *   // Submit attestation to smart contract
+     *   const result = await suiClient.updateSiteWithTEEAttestation(
+     *     privateKey,
+     *     siteRecordId,
+     *     response.attestation
+     *   );
+     * }
+     * ```
+     *
+     * @see TEE_ATTESTATION_INTEGRATION_PLAN.md - Phase 2, Step 2.2
+     */
+    async requestAttestation(request) {
+        const requestId = this.generateRequestId();
+        return this.withRetry(async () => {
+            try {
+                core.info('🔐 Requesting TEE attestation for deployment verification');
+                core.info(`TEE Server: ${this.config.server_url}`);
+                core.info(`Domain: ${request.domain}`);
+                core.info(`Site Record ID: ${request.site_record_id}`);
+                // Validate request
+                this.validateAttestationRequest(request);
+                // Prepare request headers
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'User-Agent': request.client_info.user_agent,
+                    'X-CryptoGuard-Version': request.client_info.action_version,
+                    'X-Request-ID': requestId,
+                    'X-GitHub-Run-ID': String(request.github_context.run_id),
+                };
+                // Make HTTP request to TEE server attestation endpoint
+                const response = await fetch(`${this.config.server_url}attest`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(request),
+                    signal: AbortSignal.timeout(this.config.timeout),
+                });
+                if (!response.ok) {
+                    const errorBody = await response.text().catch(() => 'Unknown error');
+                    if (response.status === 422) {
+                        throw new TEEValidationError(`TEE attestation validation failed: ${errorBody}`);
+                    }
+                    else if (response.status === 503) {
+                        throw new TEECommunicationError(`TEE server temporarily unavailable: ${errorBody}`, true);
+                    }
+                    else if (response.status >= 500) {
+                        throw new TEECommunicationError(`TEE server error: ${errorBody}`, true);
+                    }
+                    else if (response.status === 401 || response.status === 403) {
+                        throw new TEEServerError(`TEE attestation authorization failed: ${errorBody}`, 'TEE_AUTH_FAILED', response.status, false);
+                    }
+                    else {
+                        throw new TEEServerError(`TEE attestation request failed: ${errorBody}`, 'TEE_REQUEST_FAILED', response.status, false);
+                    }
+                }
+                const result = await response.json();
+                // Validate and normalize response
+                const validatedResponse = this.validateAttestationResponse(result, requestId);
+                if (validatedResponse.success && validatedResponse.attestation) {
+                    core.info('✅ TEE attestation received successfully');
+                    core.info(`Request ID: ${validatedResponse.request_id}`);
+                    if (validatedResponse.verification_summary) {
+                        const summary = validatedResponse.verification_summary;
+                        core.info(`Domain verified: ${summary.domain_verified}`);
+                        core.info(`GitHub verified: ${summary.github_verified}`);
+                        core.info(`Provenance verified: ${summary.provenance_verified}`);
+                        core.info(`Walrus blobs verified: ${summary.walrus_blobs_verified}`);
+                    }
+                }
+                else {
+                    core.warning(`⚠️ TEE attestation failed: ${validatedResponse.error}`);
+                    if (validatedResponse.error_code) {
+                        core.warning(`Error code: ${validatedResponse.error_code}`);
+                    }
+                }
+                return validatedResponse;
+            }
+            catch (error) {
+                if (error instanceof TEEServerError) {
+                    throw error;
+                }
+                else if (error instanceof TypeError &&
+                    (error.message.includes('AbortError') || error.message.includes('timeout'))) {
+                    throw new TEETimeoutError(`TEE attestation request timed out after ${this.config.timeout}ms`);
+                }
+                else {
+                    throw new TEECommunicationError(`TEE attestation request failed: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+        });
+    }
+    /**
+     * Validate TEE attestation request.
+     *
+     * Ensures all required fields are present and have valid values.
+     *
+     * @param request - The attestation request to validate
+     * @throws TEEValidationError if validation fails
+     */
+    validateAttestationRequest(request) {
+        // Domain validation
+        if (!request.domain || typeof request.domain !== 'string') {
+            throw new TEEValidationError('Domain is required and must be a string');
+        }
+        if (request.domain.length === 0) {
+            throw new TEEValidationError('Domain cannot be empty');
+        }
+        // Domain signature validation
+        if (!request.domain_signature || typeof request.domain_signature !== 'string') {
+            throw new TEEValidationError('Domain signature is required and must be a string');
+        }
+        // Site record ID validation
+        if (!request.site_record_id || typeof request.site_record_id !== 'string') {
+            throw new TEEValidationError('Site record ID is required and must be a string');
+        }
+        // Walrus blob IDs validation
+        if (!request.content_quilt_id || typeof request.content_quilt_id !== 'string') {
+            throw new TEEValidationError('Content quilt ID is required');
+        }
+        if (!request.metadata_quilt_id || typeof request.metadata_quilt_id !== 'string') {
+            throw new TEEValidationError('Metadata quilt ID is required');
+        }
+        if (!request.provenance_blob_id || typeof request.provenance_blob_id !== 'string') {
+            throw new TEEValidationError('Provenance blob ID is required');
+        }
+        // Files manifest validation
+        if (!request.files_manifest) {
+            throw new TEEValidationError('Files manifest is required');
+        }
+        if (!request.files_manifest.manifest_hash || typeof request.files_manifest.manifest_hash !== 'string') {
+            throw new TEEValidationError('Files manifest hash is required');
+        }
+        if (typeof request.files_manifest.total_files !== 'number' || request.files_manifest.total_files < 0) {
+            throw new TEEValidationError('Files manifest total_files must be a non-negative number');
+        }
+        if (typeof request.files_manifest.total_size_bytes !== 'number' || request.files_manifest.total_size_bytes < 0) {
+            throw new TEEValidationError('Files manifest total_size_bytes must be a non-negative number');
+        }
+        // GitHub context validation
+        if (!request.github_context) {
+            throw new TEEValidationError('GitHub context is required');
+        }
+        if (!request.github_context.repository || typeof request.github_context.repository !== 'string') {
+            throw new TEEValidationError('GitHub repository is required');
+        }
+        if (!request.github_context.commit_sha || typeof request.github_context.commit_sha !== 'string') {
+            throw new TEEValidationError('GitHub commit SHA is required');
+        }
+        if (request.github_context.commit_sha.length !== 40) {
+            throw new TEEValidationError('GitHub commit SHA must be 40 characters');
+        }
+        if (!request.github_context.workflow_ref || typeof request.github_context.workflow_ref !== 'string') {
+            throw new TEEValidationError('GitHub workflow ref is required');
+        }
+        if (typeof request.github_context.run_id !== 'number' || request.github_context.run_id <= 0) {
+            throw new TEEValidationError('GitHub run ID must be a positive number');
+        }
+        // Client info validation
+        if (!request.client_info) {
+            throw new TEEValidationError('Client info is required');
+        }
+        if (!request.client_info.user_agent || typeof request.client_info.user_agent !== 'string') {
+            throw new TEEValidationError('Client user agent is required');
+        }
+        if (!request.client_info.action_version || typeof request.client_info.action_version !== 'string') {
+            throw new TEEValidationError('Client action version is required');
+        }
+        // Network validation
+        if (!request.network || typeof request.network !== 'string') {
+            throw new TEEValidationError('Network is required');
+        }
+        if (!['testnet', 'mainnet', 'devnet'].includes(request.network)) {
+            throw new TEEValidationError('Network must be "testnet", "mainnet", or "devnet"');
+        }
+    }
+    /**
+     * Validate TEE attestation response from server.
+     *
+     * Ensures the response contains all required fields and that the
+     * attestation proof (if present) is structurally valid.
+     *
+     * @param response - Raw response from TEE server
+     * @param requestId - Request ID to associate with response
+     * @returns Validated and normalized response
+     * @throws TEEValidationError if response is invalid
+     */
+    validateAttestationResponse(response, requestId) {
+        if (!response || typeof response !== 'object') {
+            throw new TEEValidationError('TEE attestation response is empty or invalid');
+        }
+        const res = response;
+        // Success field is required
+        if (typeof res.success !== 'boolean') {
+            throw new TEEValidationError('TEE attestation response missing "success" field');
+        }
+        // Ensure request_id is set (use our generated one if not present)
+        const responseRequestId = typeof res.request_id === 'string' ? res.request_id : requestId;
+        // Build validated response
+        const validatedResponse = {
+            success: res.success,
+            request_id: responseRequestId,
+        };
+        // Handle error case
+        if (!res.success) {
+            if (typeof res.error === 'string') {
+                validatedResponse.error = res.error;
+            }
+            else {
+                validatedResponse.error = 'Unknown error occurred during attestation';
+            }
+            if (typeof res.error_code === 'string') {
+                validatedResponse.error_code = res.error_code;
+            }
+            return validatedResponse;
+        }
+        // For successful responses, validate attestation proof
+        if (!res.attestation) {
+            throw new TEEValidationError('TEE attestation response indicates success but contains no attestation');
+        }
+        // Validate attestation proof structure
+        if (!(0, attestation_serializer_1.validateAttestationProof)(res.attestation)) {
+            throw new TEEValidationError('TEE attestation proof is invalid or incomplete');
+        }
+        validatedResponse.attestation = res.attestation;
+        // Validate verification summary if present
+        if (res.verification_summary && typeof res.verification_summary === 'object') {
+            const summary = res.verification_summary;
+            validatedResponse.verification_summary = {
+                domain_verified: Boolean(summary.domain_verified),
+                github_verified: Boolean(summary.github_verified),
+                provenance_verified: Boolean(summary.provenance_verified),
+                walrus_blobs_verified: Boolean(summary.walrus_blobs_verified),
+                all_checks_passed: Boolean(summary.all_checks_passed),
+                timestamp: typeof summary.timestamp === 'string' ? summary.timestamp : new Date().toISOString(),
+            };
+        }
+        return validatedResponse;
+    }
+    /**
+     * Check if a response contains a valid attestation.
+     *
+     * Utility method for checking if an attestation response can be used
+     * for on-chain submission.
+     *
+     * @param response - The attestation response to check
+     * @returns True if response contains valid attestation
+     *
+     * @example
+     * ```typescript
+     * const response = await teeClient.requestAttestation(request);
+     * if (teeClient.hasValidAttestation(response)) {
+     *   // Safe to use response.attestation
+     * }
+     * ```
+     */
+    hasValidAttestation(response) {
+        return response.success === true && response.attestation !== undefined;
+    }
 }
 exports.TEEServerClient = TEEServerClient;
+
+
+/***/ }),
+
+/***/ 91831:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * TEE Attestation Types
+ *
+ * These types define the interface between the GitHub Action,
+ * TEE Server (Nitro Enclave), and Smart Contract for
+ * cryptographically verified deployments.
+ *
+ * @module types/tee-attestation
+ * @see TEE_ATTESTATION_INTEGRATION_PLAN.md - Phase 1, Step 1.1
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.isSuccessfulAttestation = isSuccessfulAttestation;
+exports.isSuccessfulSubmission = isSuccessfulSubmission;
+exports.getErrorMessage = getErrorMessage;
+/**
+ * Type guard to check if a response is a successful attestation.
+ */
+function isSuccessfulAttestation(response) {
+    return response.success === true && response.attestation !== undefined;
+}
+/**
+ * Type guard to check if a submission result was successful.
+ */
+function isSuccessfulSubmission(result) {
+    return result.success === true;
+}
+/**
+ * Get human-readable error message for an error code.
+ */
+function getErrorMessage(code) {
+    const messages = {
+        DOMAIN_NOT_REGISTERED: 'Domain is not registered. Please register the domain first using the CLI.',
+        DOMAIN_VERIFICATION_FAILED: 'Domain ownership verification failed. Ensure the domain signature is valid.',
+        GITHUB_VERIFICATION_FAILED: 'GitHub OIDC token validation failed. Ensure the workflow has proper permissions.',
+        PROVENANCE_VERIFICATION_FAILED: 'SLSA provenance verification failed. Check build attestation.',
+        WALRUS_VERIFICATION_FAILED: 'Walrus blob verification failed. Ensure all blobs are uploaded and accessible.',
+        ATTESTATION_GENERATION_FAILED: 'TEE enclave failed to generate attestation. Please retry.',
+        ENCLAVE_ERROR: 'Internal enclave error. Contact support if this persists.',
+        TIMEOUT: 'Request timed out. Please retry with a longer timeout.',
+        INTERNAL_ERROR: 'An unexpected error occurred. Contact support.',
+    };
+    return messages[code] || `Unknown error: ${code}`;
+}
+
+
+/***/ }),
+
+/***/ 42949:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Attestation Serialization Utilities
+ *
+ * Functions to serialize attestation payloads in a deterministic way
+ * that matches the smart contract's deserialization logic.
+ *
+ * @module utils/attestation-serializer
+ * @see TEE_ATTESTATION_INTEGRATION_PLAN.md - Phase 3, Step 3.1
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.TEEAttestationPayloadSchema = void 0;
+exports.serializeAttestationPayload = serializeAttestationPayload;
+exports.serializeAttestationProof = serializeAttestationProof;
+exports.hexToBytes = hexToBytes;
+exports.bytesToHex = bytesToHex;
+exports.validateAttestationPayload = validateAttestationPayload;
+exports.validateAttestationProof = validateAttestationProof;
+exports.getPayloadFingerprint = getPayloadFingerprint;
+exports.isAttestationExpired = isAttestationExpired;
+exports.getAttestationRemainingTime = getAttestationRemainingTime;
+exports.deserializeAttestationPayload = deserializeAttestationPayload;
+exports.verifyBCSRoundtrip = verifyBCSRoundtrip;
+const bcs_1 = __nccwpck_require__(37445);
+/**
+ * BCS Schema for TEEAttestationPayload
+ *
+ * This schema MUST match the smart contract's deserialization exactly.
+ * Field order and types are critical for correct verification on-chain.
+ *
+ * Move struct equivalent:
+ * ```move
+ * struct TEEAttestationPayload has copy, drop {
+ *   domain: String,
+ *   site_record_id: String,
+ *   content_quilt_id: String,
+ *   metadata_quilt_id: String,
+ *   provenance_blob_id: String,
+ *   files_manifest_hash: String,
+ *   total_files: u64,
+ *   total_size_bytes: u64,
+ *   github_repo: String,
+ *   github_commit_sha: String,
+ *   github_workflow_ref: String,
+ *   github_run_id: u64,
+ *   verification_timestamp: u64,
+ *   attestation_expiry: u64,
+ * }
+ * ```
+ */
+/**
+ * BCS Schema for TEEAttestationPayload - exported for contract verification
+ */
+exports.TEEAttestationPayloadSchema = bcs_1.bcs.struct('TEEAttestationPayload', {
+    domain: bcs_1.bcs.string(),
+    site_record_id: bcs_1.bcs.string(),
+    content_quilt_id: bcs_1.bcs.string(),
+    metadata_quilt_id: bcs_1.bcs.string(),
+    provenance_blob_id: bcs_1.bcs.string(),
+    files_manifest_hash: bcs_1.bcs.string(),
+    total_files: bcs_1.bcs.u64(),
+    total_size_bytes: bcs_1.bcs.u64(),
+    github_repo: bcs_1.bcs.string(),
+    github_commit_sha: bcs_1.bcs.string(),
+    github_workflow_ref: bcs_1.bcs.string(),
+    github_run_id: bcs_1.bcs.u64(),
+    verification_timestamp: bcs_1.bcs.u64(),
+    attestation_expiry: bcs_1.bcs.u64(),
+});
+/**
+ * Serialize attestation payload to bytes for signing/verification.
+ *
+ * IMPORTANT: This must match the smart contract's deserialization exactly.
+ * Uses BCS (Binary Canonical Serialization) for Move contract compatibility.
+ *
+ * Format: BCS (Binary Canonical Serialization) matching Sui Move struct layout
+ *
+ * @param payload - The attestation payload to serialize
+ * @returns Serialized bytes of the payload
+ *
+ * @example
+ * ```typescript
+ * const payload: TEEAttestationPayload = { ... };
+ * const bytes = serializeAttestationPayload(payload);
+ * // bytes can be used for signature verification and smart contract calls
+ * ```
+ */
+function serializeAttestationPayload(payload) {
+    // Validate payload before serialization
+    if (!validateAttestationPayload(payload)) {
+        throw new Error('Invalid attestation payload: missing or invalid required fields');
+    }
+    // BCS serialization matching smart contract struct layout
+    // Field order is critical - must match the Move struct definition exactly
+    return exports.TEEAttestationPayloadSchema.serialize({
+        domain: payload.domain,
+        site_record_id: payload.site_record_id,
+        content_quilt_id: payload.content_quilt_id,
+        metadata_quilt_id: payload.metadata_quilt_id,
+        provenance_blob_id: payload.provenance_blob_id,
+        files_manifest_hash: payload.files_manifest_hash,
+        total_files: BigInt(payload.total_files),
+        total_size_bytes: BigInt(payload.total_size_bytes),
+        github_repo: payload.github_repo,
+        github_commit_sha: payload.github_commit_sha,
+        github_workflow_ref: payload.github_workflow_ref,
+        github_run_id: BigInt(payload.github_run_id),
+        verification_timestamp: BigInt(payload.verification_timestamp),
+        attestation_expiry: BigInt(payload.attestation_expiry),
+    }).toBytes();
+}
+/**
+ * Serialize attestation proof for smart contract submission.
+ *
+ * Converts all hex-encoded strings in the proof to Uint8Arrays
+ * suitable for passing to Move contract functions.
+ *
+ * @param proof - The TEE attestation proof to serialize
+ * @returns Object containing serialized byte arrays
+ * @throws Error if any hex strings are invalid
+ *
+ * @example
+ * ```typescript
+ * const proof: TEEAttestationProof = { ... };
+ * const serialized = serializeAttestationProof(proof);
+ *
+ * // Use in Move call:
+ * tx.moveCall({
+ *   target: '...',
+ *   arguments: [
+ *     tx.pure(Array.from(serialized.payload)),
+ *     tx.pure(Array.from(serialized.signature)),
+ *     tx.pure(Array.from(serialized.publicKey)),
+ *     tx.pure(Array.from(serialized.measurement)),
+ *   ],
+ * });
+ * ```
+ */
+function serializeAttestationProof(proof) {
+    if (!proof) {
+        throw new Error('Proof is required');
+    }
+    if (!proof.payload) {
+        throw new Error('Proof payload is required');
+    }
+    if (!proof.signature) {
+        throw new Error('Proof signature is required');
+    }
+    if (!proof.public_key) {
+        throw new Error('Proof public_key is required');
+    }
+    if (!proof.enclave_measurement) {
+        throw new Error('Proof enclave_measurement is required');
+    }
+    return {
+        payload: serializeAttestationPayload(proof.payload),
+        signature: hexToBytes(proof.signature),
+        publicKey: hexToBytes(proof.public_key),
+        measurement: hexToBytes(proof.enclave_measurement),
+    };
+}
+/**
+ * Convert hex string to Uint8Array.
+ *
+ * Handles both with and without '0x' prefix.
+ *
+ * @param hex - Hexadecimal string (with or without 0x prefix)
+ * @returns Uint8Array of bytes
+ * @throws Error if hex string is invalid
+ *
+ * @example
+ * ```typescript
+ * hexToBytes('0xdeadbeef') // => Uint8Array [222, 173, 190, 239]
+ * hexToBytes('deadbeef')   // => Uint8Array [222, 173, 190, 239]
+ * ```
+ */
+function hexToBytes(hex) {
+    if (typeof hex !== 'string') {
+        throw new Error('Hex input must be a string');
+    }
+    // Remove 0x prefix if present
+    const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+    // Validate hex string
+    if (cleanHex.length === 0) {
+        return new Uint8Array(0);
+    }
+    if (cleanHex.length % 2 !== 0) {
+        throw new Error('Hex string must have even length');
+    }
+    if (!/^[a-fA-F0-9]*$/.test(cleanHex)) {
+        throw new Error('Invalid hex character in string');
+    }
+    const bytes = new Uint8Array(cleanHex.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+        const byte = parseInt(cleanHex.slice(i * 2, i * 2 + 2), 16);
+        bytes[i] = byte;
+    }
+    return bytes;
+}
+/**
+ * Convert Uint8Array to hex string.
+ *
+ * @param bytes - Uint8Array to convert
+ * @param prefix - Whether to add '0x' prefix (default: true)
+ * @returns Hexadecimal string representation
+ *
+ * @example
+ * ```typescript
+ * bytesToHex(new Uint8Array([222, 173, 190, 239]))       // => '0xdeadbeef'
+ * bytesToHex(new Uint8Array([222, 173, 190, 239]), false) // => 'deadbeef'
+ * ```
+ */
+function bytesToHex(bytes, prefix = true) {
+    if (!(bytes instanceof Uint8Array)) {
+        throw new Error('Input must be a Uint8Array');
+    }
+    const hex = Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+    return prefix ? `0x${hex}` : hex;
+}
+/**
+ * Validate attestation payload structure.
+ *
+ * Type guard that checks all required fields are present and have correct types.
+ * Does not validate the semantic correctness of values (e.g., valid Sui address format).
+ *
+ * @param payload - Unknown value to validate
+ * @returns True if payload is a valid TEEAttestationPayload
+ *
+ * @example
+ * ```typescript
+ * if (validateAttestationPayload(response.payload)) {
+ *   // payload is typed as TEEAttestationPayload
+ *   console.log(payload.domain);
+ * }
+ * ```
+ */
+function validateAttestationPayload(payload) {
+    if (!payload || typeof payload !== 'object') {
+        return false;
+    }
+    const p = payload;
+    // Check all required string fields
+    const requiredStringFields = [
+        'domain',
+        'site_record_id',
+        'content_quilt_id',
+        'metadata_quilt_id',
+        'provenance_blob_id',
+        'files_manifest_hash',
+        'github_repo',
+        'github_commit_sha',
+        'github_workflow_ref',
+    ];
+    for (const field of requiredStringFields) {
+        if (typeof p[field] !== 'string') {
+            return false;
+        }
+    }
+    // Check all required number fields
+    const requiredNumberFields = [
+        'total_files',
+        'total_size_bytes',
+        'github_run_id',
+        'verification_timestamp',
+        'attestation_expiry',
+    ];
+    for (const field of requiredNumberFields) {
+        if (typeof p[field] !== 'number') {
+            return false;
+        }
+    }
+    // Additional semantic validations
+    const typedPayload = p;
+    // Domain should not be empty
+    if (typedPayload.domain.length === 0) {
+        return false;
+    }
+    // Total files should be non-negative
+    if (typedPayload.total_files < 0) {
+        return false;
+    }
+    // Total size should be non-negative
+    if (typedPayload.total_size_bytes < 0) {
+        return false;
+    }
+    // GitHub run ID should be positive
+    if (typedPayload.github_run_id <= 0) {
+        return false;
+    }
+    // Timestamps should be positive
+    if (typedPayload.verification_timestamp <= 0) {
+        return false;
+    }
+    if (typedPayload.attestation_expiry <= 0) {
+        return false;
+    }
+    // Expiry should be after verification timestamp
+    if (typedPayload.attestation_expiry <=
+        typedPayload.verification_timestamp) {
+        return false;
+    }
+    return true;
+}
+/**
+ * Validate attestation proof structure.
+ *
+ * Checks that the proof contains all required fields and that
+ * the embedded payload is valid.
+ *
+ * @param proof - Unknown value to validate
+ * @returns True if proof is a valid TEEAttestationProof
+ */
+function validateAttestationProof(proof) {
+    if (!proof || typeof proof !== 'object') {
+        return false;
+    }
+    const p = proof;
+    // Check required string fields
+    if (typeof p.signature !== 'string' || p.signature.length === 0) {
+        return false;
+    }
+    if (typeof p.public_key !== 'string' || p.public_key.length === 0) {
+        return false;
+    }
+    if (typeof p.enclave_measurement !== 'string' || p.enclave_measurement.length === 0) {
+        return false;
+    }
+    // Validate the payload
+    if (!validateAttestationPayload(p.payload)) {
+        return false;
+    }
+    // Validate hex format for signature (should be 128 hex chars for Ed25519 = 64 bytes)
+    const sigHex = p.signature.startsWith('0x')
+        ? p.signature.slice(2)
+        : p.signature;
+    if (sigHex.length !== 128 || !/^[a-fA-F0-9]+$/.test(sigHex)) {
+        return false;
+    }
+    // Validate hex format for public key (should be 64 hex chars for Ed25519 = 32 bytes)
+    const pkHex = p.public_key.startsWith('0x')
+        ? p.public_key.slice(2)
+        : p.public_key;
+    if (pkHex.length !== 64 || !/^[a-fA-F0-9]+$/.test(pkHex)) {
+        return false;
+    }
+    return true;
+}
+/**
+ * Create a fingerprint of the attestation payload for comparison/logging.
+ *
+ * Uses a simple hash of the serialized payload for debugging purposes.
+ * This is NOT cryptographically secure - use proper SHA-256 for security.
+ *
+ * @param payload - The attestation payload
+ * @returns Fingerprint string for identification
+ */
+function getPayloadFingerprint(payload) {
+    const bytes = serializeAttestationPayload(payload);
+    // Simple djb2 hash for fingerprinting (NOT cryptographically secure)
+    let hash = 5381;
+    for (let i = 0; i < bytes.length; i++) {
+        hash = ((hash << 5) + hash) ^ bytes[i];
+        hash = hash >>> 0; // Convert to unsigned 32-bit
+    }
+    // Return hash as hex with length suffix
+    const hashHex = hash.toString(16).padStart(8, '0');
+    return `0x${hashHex}...${bytes.length}b`;
+}
+/**
+ * Check if an attestation has expired.
+ *
+ * @param payload - The attestation payload
+ * @param nowMs - Current timestamp in milliseconds (defaults to Date.now())
+ * @returns True if the attestation has expired
+ */
+function isAttestationExpired(payload, nowMs = Date.now()) {
+    return nowMs >= payload.attestation_expiry;
+}
+/**
+ * Get remaining validity time for an attestation.
+ *
+ * @param payload - The attestation payload
+ * @param nowMs - Current timestamp in milliseconds (defaults to Date.now())
+ * @returns Remaining time in milliseconds (negative if expired)
+ */
+function getAttestationRemainingTime(payload, nowMs = Date.now()) {
+    return payload.attestation_expiry - nowMs;
+}
+/**
+ * Deserialize BCS bytes back to attestation payload.
+ *
+ * Useful for verification and testing to ensure the serialization
+ * roundtrips correctly and matches contract expectations.
+ *
+ * @param bytes - BCS-serialized payload bytes
+ * @returns Deserialized payload with BigInt converted back to numbers
+ * @throws Error if deserialization fails
+ *
+ * @example
+ * ```typescript
+ * const bytes = serializeAttestationPayload(payload);
+ * const deserialized = deserializeAttestationPayload(bytes);
+ * expect(deserialized.domain).toBe(payload.domain);
+ * ```
+ */
+function deserializeAttestationPayload(bytes) {
+    const bcsPayload = exports.TEEAttestationPayloadSchema.parse(bytes);
+    return {
+        domain: bcsPayload.domain,
+        site_record_id: bcsPayload.site_record_id,
+        content_quilt_id: bcsPayload.content_quilt_id,
+        metadata_quilt_id: bcsPayload.metadata_quilt_id,
+        provenance_blob_id: bcsPayload.provenance_blob_id,
+        files_manifest_hash: bcsPayload.files_manifest_hash,
+        total_files: Number(bcsPayload.total_files),
+        total_size_bytes: Number(bcsPayload.total_size_bytes),
+        github_repo: bcsPayload.github_repo,
+        github_commit_sha: bcsPayload.github_commit_sha,
+        github_workflow_ref: bcsPayload.github_workflow_ref,
+        github_run_id: Number(bcsPayload.github_run_id),
+        verification_timestamp: Number(bcsPayload.verification_timestamp),
+        attestation_expiry: Number(bcsPayload.attestation_expiry),
+    };
+}
+/**
+ * Verify BCS serialization roundtrip.
+ *
+ * Serializes and deserializes a payload to verify that
+ * all fields are preserved correctly through BCS encoding.
+ *
+ * @param payload - The attestation payload to verify
+ * @returns True if roundtrip is successful and data matches
+ */
+function verifyBCSRoundtrip(payload) {
+    try {
+        const bytes = serializeAttestationPayload(payload);
+        const deserialized = deserializeAttestationPayload(bytes);
+        return (deserialized.domain === payload.domain &&
+            deserialized.site_record_id === payload.site_record_id &&
+            deserialized.content_quilt_id === payload.content_quilt_id &&
+            deserialized.metadata_quilt_id === payload.metadata_quilt_id &&
+            deserialized.provenance_blob_id === payload.provenance_blob_id &&
+            deserialized.files_manifest_hash === payload.files_manifest_hash &&
+            deserialized.total_files === payload.total_files &&
+            deserialized.total_size_bytes === payload.total_size_bytes &&
+            deserialized.github_repo === payload.github_repo &&
+            deserialized.github_commit_sha === payload.github_commit_sha &&
+            deserialized.github_workflow_ref === payload.github_workflow_ref &&
+            deserialized.github_run_id === payload.github_run_id &&
+            deserialized.verification_timestamp === payload.verification_timestamp &&
+            deserialized.attestation_expiry === payload.attestation_expiry);
+    }
+    catch {
+        return false;
+    }
+}
+
+
+/***/ }),
+
+/***/ 46854:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.WalrusClient = exports.WalrusError = void 0;
+const core = __importStar(__nccwpck_require__(50099));
+/**
+ * Error thrown by Walrus operations
+ */
+class WalrusError extends Error {
+    code;
+    details;
+    constructor(message, code, details) {
+        super(message);
+        this.code = code;
+        this.details = details;
+        this.name = 'WalrusError';
+    }
+}
+exports.WalrusError = WalrusError;
+/**
+ * Client for interacting with Walrus decentralized storage
+ * Handles file uploads and blob verification with quilt support
+ */
+class WalrusClient {
+    publisherUrl;
+    aggregatorUrl;
+    timeout;
+    maxRetries;
+    constructor(config) {
+        this.publisherUrl = config.publisherUrl;
+        this.aggregatorUrl = config.aggregatorUrl || config.publisherUrl.replace('publisher', 'aggregator');
+        this.timeout = config.timeout || 30000; // 30 seconds default
+        this.maxRetries = config.maxRetries || 3;
+    }
+    /**
+     * Upload a file to Walrus storage
+     * @param fileContent - File content as Buffer or string
+     * @param fileName - Optional file name for logging
+     * @returns Blob information including blob ID
+     */
+    async uploadBlob(fileContent, fileName) {
+        const startTime = Date.now();
+        const content = Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent, 'utf-8');
+        core.debug(`Uploading blob${fileName ? ` (${fileName})` : ''} to Walrus (${content.length} bytes)`);
+        let lastError;
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+                const response = await (globalThis.fetch || fetch)(`${this.publisherUrl}/v1/store`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/octet-stream',
+                    },
+                    body: content,
+                    signal: controller.signal,
+                });
+                clearTimeout(timeoutId);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new WalrusError(`Walrus upload failed: ${response.status} ${response.statusText}`, 'UPLOAD_FAILED', { status: response.status, body: errorText });
+                }
+                const result = await response.json();
+                // Walrus returns different response formats depending on whether blob is new or already exists
+                let blobId;
+                if (result.newlyCreated) {
+                    // New blob was created
+                    blobId = result.newlyCreated.blobObject?.blobId || result.newlyCreated.blobId;
+                }
+                else if (result.alreadyCertified) {
+                    // Blob already exists and is certified
+                    blobId = result.alreadyCertified.blobId || result.alreadyCertified.blobObject?.blobId;
+                }
+                else {
+                    throw new WalrusError('Unexpected Walrus response format', 'INVALID_RESPONSE', { response: result });
+                }
+                if (!blobId) {
+                    throw new WalrusError('Blob ID not found in Walrus response', 'MISSING_BLOB_ID', { response: result });
+                }
+                const uploadDuration = Date.now() - startTime;
+                core.debug(`✅ Blob uploaded successfully: ${blobId} (${uploadDuration}ms)`);
+                return {
+                    blobId,
+                    size: content.length,
+                    uploadDuration,
+                };
+            }
+            catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                if (error instanceof WalrusError) {
+                    // Don't retry on certain error codes
+                    if (error.code === 'INVALID_RESPONSE' || error.code === 'MISSING_BLOB_ID') {
+                        throw error;
+                    }
+                }
+                if (attempt < this.maxRetries) {
+                    const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff, max 5s
+                    core.warning(`Walrus upload attempt ${attempt} failed, retrying in ${delay}ms: ${lastError.message}`);
+                    await this.sleep(delay);
+                }
+            }
+        }
+        throw new WalrusError(`Failed to upload blob after ${this.maxRetries} attempts: ${lastError?.message}`, 'MAX_RETRIES_EXCEEDED', { lastError: lastError?.message });
+    }
+    /**
+     * Upload multiple blobs in parallel
+     * @param files - Map of file path to file content
+     * @param concurrency - Max number of parallel uploads
+     * @returns Map of file path to blob ID
+     */
+    async uploadBlobs(files, concurrency = 5) {
+        const entries = Object.entries(files);
+        const results = {};
+        core.debug(`Uploading ${entries.length} files (concurrency: ${concurrency})`);
+        // Process in batches
+        for (let i = 0; i < entries.length; i += concurrency) {
+            const batch = entries.slice(i, i + concurrency);
+            const batchResults = await Promise.all(batch.map(async ([path, content]) => {
+                const blobInfo = await this.uploadBlob(content, path);
+                core.debug(`Uploaded ${path} → ${blobInfo.blobId}`);
+                return { path, blobId: blobInfo.blobId };
+            }));
+            for (const { path, blobId } of batchResults) {
+                results[path] = blobId;
+            }
+        }
+        return results;
+    }
+    /**
+     * Verify that a blob exists in Walrus
+     * @param blobId - Blob ID to verify
+     * @returns True if blob exists and is accessible
+     */
+    async verifyBlob(blobId) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+            const response = await (globalThis.fetch || fetch)(`${this.aggregatorUrl}/v1/${blobId}`, {
+                method: 'HEAD',
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+            return response.ok;
+        }
+        catch (error) {
+            core.warning(`Failed to verify blob ${blobId}: ${error instanceof Error ? error.message : String(error)}`);
+            return false;
+        }
+    }
+    /**
+     * Upload files using two-quilt structure (content + metadata)
+     * This matches the structure used by the verification server
+     *
+     * @param files - Map of file path to file content
+     * @param provenance - Provenance data
+     * @param metadata - Additional metadata
+     * @returns Two-quilt deployment structure
+     */
+    async uploadTwoQuiltStructure(files, provenance, metadata) {
+        // Upload individual file blobs
+        const fileBlobInfos = [];
+        for (const [filePath, fileContent] of Object.entries(files)) {
+            const blobInfo = await this.uploadBlob(fileContent, filePath);
+            const contentType = this.getContentType(filePath);
+            fileBlobInfos.push({
+                path: filePath,
+                blobId: blobInfo.blobId,
+                size: blobInfo.size,
+                contentType,
+            });
+            core.debug(`Uploaded ${filePath} → ${blobInfo.blobId}`);
+        }
+        // Create and upload content quilt manifest
+        const contentQuiltManifest = {
+            version: '1.0',
+            files: fileBlobInfos,
+            metadata: {
+                created_at: new Date().toISOString(),
+                total_files: fileBlobInfos.length,
+                total_size: fileBlobInfos.reduce((sum, f) => sum + f.size, 0),
+            },
+        };
+        const contentQuiltBlob = await this.uploadBlob(JSON.stringify(contentQuiltManifest, null, 2), 'content-quilt-manifest.json');
+        core.debug(`Content quilt created: ${contentQuiltBlob.blobId}`);
+        // Upload provenance
+        const provenanceContent = JSON.stringify(provenance, null, 2);
+        const provenanceBlob = await this.uploadBlob(provenanceContent, 'provenance.json');
+        core.debug(`Provenance uploaded: ${provenanceBlob.blobId}`);
+        // Create and upload metadata quilt with links
+        const metadataQuiltManifest = {
+            version: '1.0',
+            files: [
+                {
+                    path: 'provenance.json',
+                    blobId: provenanceBlob.blobId,
+                    size: provenanceBlob.size,
+                    contentType: 'application/json',
+                },
+                {
+                    path: 'content-quilt.json',
+                    blobId: contentQuiltBlob.blobId,
+                    size: contentQuiltBlob.size,
+                    contentType: 'application/json',
+                },
+            ],
+            metadata: {
+                ...metadata,
+                created_at: new Date().toISOString(),
+                content_quilt_id: contentQuiltBlob.blobId,
+                deployment_type: 'two-quilt-structure',
+            },
+        };
+        const metadataQuiltBlob = await this.uploadBlob(JSON.stringify(metadataQuiltManifest, null, 2), 'metadata-quilt-manifest.json');
+        core.debug(`Metadata quilt created: ${metadataQuiltBlob.blobId} (links to content quilt)`);
+        return {
+            contentQuilt: {
+                blobId: contentQuiltBlob.blobId,
+                manifest: contentQuiltManifest,
+                totalSize: contentQuiltBlob.size,
+            },
+            metadataQuilt: {
+                blobId: metadataQuiltBlob.blobId,
+                manifest: metadataQuiltManifest,
+                totalSize: metadataQuiltBlob.size,
+            },
+        };
+    }
+    /**
+     * Get content type from file extension
+     */
+    getContentType(filePath) {
+        const ext = filePath.split('.').pop()?.toLowerCase();
+        const contentTypes = {
+            html: 'text/html',
+            css: 'text/css',
+            js: 'application/javascript',
+            json: 'application/json',
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            gif: 'image/gif',
+            svg: 'image/svg+xml',
+            woff: 'font/woff',
+            woff2: 'font/woff2',
+            ttf: 'font/ttf',
+            ico: 'image/x-icon',
+        };
+        return contentTypes[ext || ''] || 'application/octet-stream';
+    }
+    /**
+     * Sleep for specified milliseconds
+     */
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+}
+exports.WalrusClient = WalrusClient;
 
 
 /***/ }),
@@ -137471,35 +139375,19 @@ function isValidSignature(signature) {
 
 class CryptoService {
     static async getEd25519() {
-        if (this.ed25519Cache) {
-            return this.ed25519Cache;
+        const module = await __nccwpck_require__.e(/* import() */ 858).then(__nccwpck_require__.bind(__nccwpck_require__, 7858));
+        // Handle both ESM default export and named exports
+        const ed25519 = module.default || module;
+        // Always ensure sha512Sync is configured (may be reset between Jest tests)
+        if (ed25519.etc && !ed25519.etc.sha512Sync) {
+            const { sha512 } = await Promise.all(/* import() */[__nccwpck_require__.e(860), __nccwpck_require__.e(878)]).then(__nccwpck_require__.bind(__nccwpck_require__, 57878));
+            const { concatBytes } = await __nccwpck_require__.e(/* import() */ 7).then(__nccwpck_require__.bind(__nccwpck_require__, 28007));
+            ed25519.etc.sha512Sync = (...messages) => {
+                return sha512(concatBytes(...messages));
+            };
         }
-        // Import ed25519 first
-        const ed25519Module = await __nccwpck_require__.e(/* import() */ 858).then(__nccwpck_require__.bind(__nccwpck_require__, 7858));
-        // IMMEDIATELY set up SHA512 after import
-        const { sha512 } = await Promise.all(/* import() */[__nccwpck_require__.e(860), __nccwpck_require__.e(878)]).then(__nccwpck_require__.bind(__nccwpck_require__, 57878));
-        const { concatBytes } = await __nccwpck_require__.e(/* import() */ 7).then(__nccwpck_require__.bind(__nccwpck_require__, 28007));
-        // Set up the global SHA512 function that @noble/ed25519 v2.x requires
-        const ed25519 = ed25519Module;
-        // Create the SHA512 function
-        const sha512Func = (...messages) => {
-            return sha512(concatBytes(...messages));
-        };
-        console.log('DEBUG: ed25519.etc exists:', !!ed25519.etc);
-        console.log('DEBUG: ed25519.etc.sha512Sync before:', ed25519.etc?.sha512Sync);
-        // Set SHA512 on the etc object (this is where the library actually looks)
-        try {
-            ed25519.etc.sha512Sync = sha512Func;
-            console.log('DEBUG: Successfully set ed25519.etc.sha512Sync');
-        }
-        catch (error) {
-            console.log('DEBUG: Failed to set ed25519.etc.sha512Sync:', error);
-        }
-        // Final check
-        console.log('DEBUG: Final check - etc.sha512Sync exists:', !!ed25519.etc?.sha512Sync);
-        console.log('DEBUG: Final check - etc.sha512Sync type:', typeof ed25519.etc?.sha512Sync);
-        this.ed25519Cache = ed25519Module;
-        return ed25519Module;
+        this.ed25519Cache = ed25519;
+        return ed25519;
     }
     /**
      * Lazy load noble/hashes to handle ES module imports
@@ -137538,7 +139426,8 @@ class CryptoService {
         const normalizedKey = normalizePrivateKey(privateKey);
         const messageBytes = new TextEncoder().encode(message);
         const privateKeyBytes = Buffer.from(normalizedKey.replace('0x', ''), 'hex');
-        const signature = await ed25519.sign(messageBytes, privateKeyBytes);
+        // Use sync sign (sha512Sync is set up in getEd25519)
+        const signature = ed25519.sign(messageBytes, privateKeyBytes);
         return '0x' + Buffer.from(signature).toString('hex');
     }
     /**
@@ -137558,7 +139447,8 @@ class CryptoService {
             const messageBytes = new TextEncoder().encode(message);
             const signatureBytes = Buffer.from(signature.replace('0x', ''), 'hex');
             const publicKeyBytes = Buffer.from(publicKey.replace('0x', ''), 'hex');
-            return await ed25519.verify(signatureBytes, messageBytes, publicKeyBytes);
+            // Use sync verify (sha512Sync is set up in getEd25519)
+            return ed25519.verify(signatureBytes, messageBytes, publicKeyBytes);
         }
         catch {
             return false;
@@ -137616,6 +139506,7 @@ class CryptoService {
 }
 /**
  * Lazy load noble/ed25519 to handle ES module imports
+ * Sets up sha512Sync for sync operations (sign, verify)
  */
 CryptoService.ed25519Cache = null;
 //# sourceMappingURL=crypto-service.js.map
@@ -137744,8 +139635,8 @@ module.exports = {"rE":"4.0.1"};
 /******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
 /******/ 		var module = __webpack_module_cache__[moduleId] = {
-/******/ 			// no module.id needed
-/******/ 			// no module.loaded needed
+/******/ 			id: moduleId,
+/******/ 			loaded: false,
 /******/ 			exports: {}
 /******/ 		};
 /******/ 	
@@ -137758,12 +139649,18 @@ module.exports = {"rE":"4.0.1"};
 /******/ 			if(threw) delete __webpack_module_cache__[moduleId];
 /******/ 		}
 /******/ 	
+/******/ 		// Flag the module as loaded
+/******/ 		module.loaded = true;
+/******/ 	
 /******/ 		// Return the exports of the module
 /******/ 		return module.exports;
 /******/ 	}
 /******/ 	
 /******/ 	// expose the modules object (__webpack_modules__)
 /******/ 	__nccwpck_require__.m = __webpack_modules__;
+/******/ 	
+/******/ 	// expose the module cache
+/******/ 	__nccwpck_require__.c = __webpack_module_cache__;
 /******/ 	
 /************************************************************************/
 /******/ 	/* webpack/runtime/define property getters */
@@ -137816,6 +139713,15 @@ module.exports = {"rE":"4.0.1"};
 /******/ 		};
 /******/ 	})();
 /******/ 	
+/******/ 	/* webpack/runtime/node module decorator */
+/******/ 	(() => {
+/******/ 		__nccwpck_require__.nmd = (module) => {
+/******/ 			module.paths = [];
+/******/ 			if (!module.children) module.children = [];
+/******/ 			return module;
+/******/ 		};
+/******/ 	})();
+/******/ 	
 /******/ 	/* webpack/runtime/compat */
 /******/ 	
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
@@ -137864,10 +139770,10 @@ module.exports = {"rE":"4.0.1"};
 /******/ 	
 /************************************************************************/
 /******/ 	
+/******/ 	// module cache are used so entry inlining is disabled
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
-/******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(15187);
+/******/ 	var __webpack_exports__ = __nccwpck_require__(__nccwpck_require__.s = 15187);
 /******/ 	module.exports = __webpack_exports__;
 /******/ 	
 /******/ })()

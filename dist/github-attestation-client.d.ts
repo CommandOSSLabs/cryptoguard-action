@@ -4,7 +4,6 @@
  * Replaces TEE-based attestation with GitHub Actions native security
  */
 export interface GitHubAttestationConfig {
-    domain_verify_hash: string;
     private_key: string;
     timeout?: number;
     max_retries?: number;
@@ -25,15 +24,12 @@ export interface RetryConfig {
 export interface DomainVerificationRequest {
     domain: string;
     signature: string;
+    publicKey: string;
 }
 export interface DomainVerificationResult {
     verified: boolean;
     github_attestation: {
-        hash: string;
-        signature: string;
-        oidc_token: string;
         timestamp: string;
-        attestation_type: 'github-oidc';
         run_id: number;
         repository: string;
         workflow: string;
@@ -124,7 +120,7 @@ export interface RegistryInfo {
 export interface DomainRecord {
     site_record_id: string;
     domain: string;
-    domain_verification_hash: string;
+    challenge_value: string;
     owner: string;
     registered_at: string;
     expires_at: string;
@@ -231,7 +227,10 @@ export declare class GitHubAttestationClient {
      */
     private getOIDCToken;
     /**
-     * Verify domain ownership using GitHub OIDC
+     * Verify domain ownership using signature verification
+     *
+     * Note: OIDC token fetching removed as part of Phase 0 API alignment.
+     * The TEE server now handles OIDC verification directly.
      */
     verifyDomainOwnership(request: DomainVerificationRequest): Promise<DomainVerificationResult>;
     /**
