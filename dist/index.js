@@ -98274,6 +98274,7 @@ function parseInputs() {
         suiRpcUrl: core.getInput('sui-rpc-url') ||
             (network === 'mainnet' ? 'https://fullnode.mainnet.sui.io:443' : 'https://fullnode.testnet.sui.io:443'),
         registryId: core.getInput('registry-id', { required: true }),
+        packageId: core.getInput('package-id') || '', // Empty means use network default
         walrusPublisherUrl: core.getInput('walrus-publisher-url') ||
             (network === 'mainnet' ? 'https://publisher.walrus.space' : 'https://publisher.walrus-testnet.walrus.space'),
         walrusAggregatorUrl: core.getInput('walrus-aggregator-url') ||
@@ -98513,12 +98514,14 @@ async function executeDeployment(inputs) {
         rpcUrl: inputs.suiRpcUrl,
         network: inputs.network,
         registryId: inputs.registryId,
+        packageId: inputs.packageId || undefined, // Use network default if not specified
         gasBudget: inputs.gasBudget,
     });
     debugLog('Sui client config', {
         rpcUrl: inputs.suiRpcUrl,
         network: inputs.network,
         registryId: inputs.registryId,
+        packageId: inputs.packageId || '(using network default)',
         gasBudget: inputs.gasBudget
     });
     // Build deployment data for direct update
@@ -99931,11 +99934,11 @@ class CryptoGuardSuiClient {
      * Get default package ID for network
      */
     getDefaultPackageId(network) {
-        // These would be set after contract deployment
+        // Production contract IDs deployed on each network
         const packageIds = {
-            testnet: process.env.SUI_PACKAGE_ID_TESTNET || '0x0', // Placeholder
-            mainnet: process.env.SUI_PACKAGE_ID_MAINNET || '0x0', // Placeholder
-            localnet: process.env.SUI_PACKAGE_ID_LOCALNET || '0x0', // Placeholder
+            testnet: process.env.SUI_PACKAGE_ID_TESTNET || '0xddba6e2954145327888ca39d4875b858622023175869d63b06e2d2ff7cc49310',
+            mainnet: process.env.SUI_PACKAGE_ID_MAINNET || '0x0', // Not deployed yet
+            localnet: process.env.SUI_PACKAGE_ID_LOCALNET || '0x0', // For local development
         };
         return packageIds[network] || '0x0';
     }
