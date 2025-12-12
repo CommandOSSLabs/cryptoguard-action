@@ -96232,139 +96232,6 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
-/***/ 54539:
-/***/ ((__unused_webpack_module, exports) => {
-
-"use strict";
-
-/**
- * Feature Flags for TEE Attestation Flow
- *
- * These flags control optional behavior in the TEE attestation flow.
- * The TEE attestation flow is now the only supported deployment method.
- *
- * @module config/feature-flags
- */
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.DEFAULT_FEATURE_FLAGS = void 0;
-exports.getFeatureFlags = getFeatureFlags;
-exports.describeActiveFlags = describeActiveFlags;
-exports.validateFeatureFlags = validateFeatureFlags;
-/**
- * Default feature flags for production use.
- *
- * All flags default to `false` for standard operation.
- * Flags can be enabled via environment variables or action inputs.
- */
-exports.DEFAULT_FEATURE_FLAGS = Object.freeze({
-    verboseAttestationLogging: false,
-});
-/**
- * Parse a string value to a boolean.
- *
- * Accepts 'true', '1', 'yes' (case-insensitive) as truthy values.
- * All other values are considered falsy.
- *
- * @param value - String value to parse
- * @returns Boolean interpretation of the value
- *
- * @internal
- */
-function parseBoolean(value) {
-    if (!value)
-        return false;
-    const normalized = value.toLowerCase().trim();
-    return normalized === 'true' || normalized === '1' || normalized === 'yes';
-}
-/**
- * Get feature flags from environment variables and/or action inputs.
- *
- * Priority order (highest to lowest):
- * 1. Action inputs (if provided)
- * 2. Environment variables
- * 3. Default values
- *
- * Environment variables:
- * - `CRYPTOGUARD_VERBOSE_ATTESTATION` - Enable verbose logging
- *
- * Action inputs:
- * - `verbose_attestation` - Enable verbose logging
- *
- * @param inputs - Optional action inputs object with string values
- * @returns Resolved feature flags
- *
- * @example
- * ```typescript
- * // Get flags from environment only
- * const flags = getFeatureFlags();
- *
- * // Get flags with action inputs
- * const flags = getFeatureFlags({
- *   verbose_attestation: 'true',
- * });
- *
- * if (flags.verboseAttestationLogging) {
- *   // Log detailed attestation info
- * }
- * ```
- */
-function getFeatureFlags(inputs) {
-    return {
-        verboseAttestationLogging: parseBoolean(inputs?.verbose_attestation) ||
-            parseBoolean(process.env.CRYPTOGUARD_VERBOSE_ATTESTATION),
-    };
-}
-/**
- * Get a human-readable description of active feature flags.
- *
- * Useful for logging the current configuration state.
- *
- * @param flags - Feature flags to describe
- * @returns Array of enabled flag descriptions
- *
- * @example
- * ```typescript
- * const flags = getFeatureFlags();
- * console.log('Active flags:', describeActiveFlags(flags).join(', '));
- * // Output: "Active flags: Verbose Attestation Logging"
- * ```
- */
-function describeActiveFlags(flags) {
-    const active = [];
-    if (flags.verboseAttestationLogging) {
-        active.push('Verbose Attestation Logging');
-    }
-    return active;
-}
-/**
- * Validate feature flag combinations for consistency.
- *
- * Currently there are no invalid combinations since TEE attestation
- * is the only supported flow.
- *
- * @param flags - Feature flags to validate
- * @returns Object with validation result and any warnings
- *
- * @example
- * ```typescript
- * const flags = getFeatureFlags();
- * const validation = validateFeatureFlags(flags);
- * if (validation.warnings.length > 0) {
- *   console.warn('Feature flag warnings:', validation.warnings);
- * }
- * ```
- */
-function validateFeatureFlags(_flags) {
-    // No invalid combinations for the simplified flag set
-    return {
-        valid: true,
-        warnings: [],
-    };
-}
-
-
-/***/ }),
-
 /***/ 79079:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -98256,9 +98123,6 @@ const provenance_1 = __nccwpck_require__(90777);
 const crypto_utils_1 = __nccwpck_require__(79079);
 const walrus_client_1 = __nccwpck_require__(46854);
 const sui_client_1 = __nccwpck_require__(88759);
-// TEE Attestation Flow imports
-const feature_flags_1 = __nccwpck_require__(54539);
-const tee_attestation_1 = __nccwpck_require__(91831);
 // Global debug mode flag - set during initialization
 let isDebugMode = false;
 /**
@@ -98277,7 +98141,12 @@ function debugLog(message, data) {
 }
 /**
  * Main entry point for the CryptoGuard Deploy action
- * Implements V1.0 workflow with GitHub OIDC and Sigstore attestation
+ *
+ * TRUSTLESS ARCHITECTURE:
+ * - Server only does read-only verification (pre-verify)
+ * - User uploads to Walrus with their own credentials
+ * - User signs and submits blockchain transaction directly
+ * - No server involvement in any write operations
  */
 async function run() {
     try {
@@ -98285,13 +98154,9 @@ async function run() {
         const inputs = parseInputs();
         // Set global debug mode
         isDebugMode = inputs.debugMode;
-        core.info('🚀 CryptoGuard User-Based Deployment');
+        core.info('🚀 CryptoGuard Trustless Deployment');
         core.info(`Domain: ${inputs.domain} | Network: ${inputs.network}`);
-        // Log TEE attestation flow status
-        core.info('🔐 TEE Attestation Flow: ENABLED (On-Chain Verification)');
-        if (inputs.verboseAttestation) {
-            core.info('   Verbose attestation logging: ENABLED');
-        }
+        core.info('🔐 Mode: Fully Trustless (User Signs Everything)');
         debugLog('Deployment configuration', {
             domain: inputs.domain,
             buildDir: inputs.buildDir,
@@ -98321,16 +98186,7 @@ async function run() {
         core.setOutput('registry_version', result.blockchainTransaction.new_version);
         core.setOutput('transaction_digest', result.blockchainTransaction.digest);
         core.setOutput('site_record_id', result.blockchainTransaction.site_record_id);
-        core.setOutput('tee_request_id', result.teeVerification.request_id);
-        core.setOutput('tee_attestation_hash', result.teeVerification.tee_attestation.measurement_hash);
-        // TEE Attestation Flow outputs
-        core.setOutput('tee_enclave_measurement', result.teeAttestationProof.enclave_measurement);
-        core.setOutput('tee_public_key', result.teeAttestationProof.public_key);
-        core.setOutput('tee_onchain_verified', 'true');
-        core.setOutput('tee_signature_valid', String(result.onChainVerification.signatureValid));
-        core.setOutput('tee_measurement_valid', String(result.onChainVerification.measurementValid));
-        core.setOutput('tee_payload_valid', String(result.onChainVerification.payloadValid));
-        core.setOutput('tee_not_expired', String(result.onChainVerification.notExpired));
+        core.setOutput('pre_verify_request_id', result.preVerification.request_id);
         // Create GitHub integrations
         await createGitHubIntegrations(inputs, result);
         // Final deployment summary
@@ -98339,7 +98195,7 @@ async function run() {
         core.info(`Version: ${result.blockchainTransaction.new_version} | Gas: ${(Number(result.blockchainTransaction.gas_used) / 1_000_000_000).toFixed(4)} SUI`);
         core.info(`Transaction: https://suiscan.xyz/${inputs.network}/tx/${result.blockchainTransaction.digest}`);
         core.info(`Site: https://${inputs.domain}`);
-        core.info('🔐 Flow: TEE Attestation (On-Chain Verified)');
+        core.info('🔐 Mode: Trustless (You Signed Everything!)');
         debugLog('Complete deployment result', {
             files: result.filesManifest.total_files,
             size_kb: (result.filesManifest.total_size_bytes / 1024).toFixed(1),
@@ -98347,7 +98203,6 @@ async function run() {
             gas_mist: result.blockchainTransaction.gas_used,
             content_quilt: result.walrusUpload.content_quilt_id,
             metadata_quilt: result.walrusUpload.metadata_quilt_id,
-            tee_request: result.teeVerification.request_id
         });
     }
     catch (error) {
@@ -98410,11 +98265,6 @@ async function run() {
  */
 function parseInputs() {
     const network = core.getInput('network') || 'testnet';
-    // Get feature flags from action inputs
-    const featureFlagInputs = {
-        verbose_attestation: core.getInput('verbose_attestation') || 'false',
-    };
-    const featureFlags = (0, feature_flags_1.getFeatureFlags)(featureFlagInputs);
     const inputs = {
         domain: core.getInput('domain', { required: true }),
         buildDir: core.getInput('build-dir', { required: true }),
@@ -98430,10 +98280,6 @@ function parseInputs() {
             (network === 'mainnet' ? 'https://aggregator.walrus.space' : 'https://aggregator.walrus-testnet.walrus.space'),
         gasBudget: core.getInput('gas-budget') || '10000000',
         debugMode: core.getInput('debug') === 'true' || process.env.CRYPTOGUARD_DEBUG === 'true',
-        // TEE Attestation Flow inputs
-        trustedTeeRegistryId: core.getInput('trusted_tee_registry_id') || '',
-        verboseAttestation: featureFlags.verboseAttestationLogging,
-        expectedEnclaveMeasurement: process.env.EXPECTED_ENCLAVE_MEASUREMENT || undefined,
     };
     // Validate required environment variables
     if (!inputs.privateKey) {
@@ -98444,26 +98290,23 @@ function parseInputs() {
     if (!domainRegex.test(inputs.domain)) {
         throw new Error(`Invalid domain format: ${inputs.domain}`);
     }
-    // Validate feature flags
-    const flagValidation = (0, feature_flags_1.validateFeatureFlags)(featureFlags);
-    if (flagValidation.warnings.length > 0) {
-        for (const warning of flagValidation.warnings) {
-            core.warning(`Feature flag warning: ${warning}`);
-        }
-    }
-    // Validate TEE Registry ID is set
-    if (!inputs.trustedTeeRegistryId) {
-        core.warning('trusted_tee_registry_id is not set. ' +
-            'The action will attempt to use TRUSTED_TEE_REGISTRY_ID environment variable.');
-    }
     return inputs;
 }
 /**
- * Execute the complete user-based deployment workflow
- * Throws on any error - no partial deployments
+ * Execute the complete trustless deployment workflow
+ *
+ * Flow:
+ * 1. GitHub OIDC Authentication + Domain Signing
+ * 2. Generate File Manifest
+ * 3. Pre-Verify with Server (read-only check)
+ * 4. Create SLSA Provenance
+ * 5. Upload to Walrus (user controlled)
+ * 6. Update Blockchain Directly (user signed)
+ *
+ * Server only involved in Step 3 (pre-verify) - NO write operations by server!
  */
 async function executeDeployment(inputs) {
-    debugLog('Starting user-based executeDeployment function', {
+    debugLog('Starting trustless executeDeployment function', {
         domain: inputs.domain,
         buildDir: inputs.buildDir,
         network: inputs.network,
@@ -98472,7 +98315,7 @@ async function executeDeployment(inputs) {
         walrusPublisherUrl: inputs.walrusPublisherUrl,
         debugMode: inputs.debugMode
     });
-    // Step 1: GitHub OIDC Authentication
+    // Step 1: GitHub OIDC Authentication + Domain Signing
     core.info('Step 1: GitHub OIDC Authentication');
     const githubClient = new github_attestation_client_1.GitHubAttestationClient({
         private_key: inputs.privateKey
@@ -98514,14 +98357,86 @@ async function executeDeployment(inputs) {
     debugLog('Files manifest', {
         total_files: filesManifest.total_files,
         total_size_bytes: filesManifest.total_size_bytes,
-        files: filesManifest.files.map(f => ({
+        files: filesManifest.files.map((f) => ({
             path: f.path,
             size: f.size_bytes,
             hash: f.content_hash.substring(0, 16) + '...'
         }))
     });
-    // Step 3: SLSA Provenance
-    core.info('Step 3: Create SLSA Provenance');
+    // Compute manifest hash
+    const manifestJson = JSON.stringify({
+        files: filesManifest.files,
+        total_files: filesManifest.total_files,
+        total_size_bytes: filesManifest.total_size_bytes
+    });
+    const manifestHash = (0, crypto_1.createHash)('sha256').update(manifestJson).digest('hex');
+    debugLog('Manifest hash computed', {
+        manifestHash: manifestHash.substring(0, 32) + '...',
+    });
+    // Step 3: Pre-Verify with Server (READ-ONLY - No server writes!)
+    core.info('Step 3: Pre-Verify with Server (Read-Only)');
+    const teeClient = new tee_server_client_1.TEEServerClient({
+        server_url: inputs.teeServerUrl,
+        timeout: 60000,
+        max_retries: 3,
+        retry_delay_ms: 2000
+    });
+    // Get OIDC token for pre-verification
+    let oidcToken;
+    try {
+        oidcToken = await core.getIDToken('cryptoguard');
+        debugLog('OIDC token obtained for pre-verification');
+    }
+    catch (oidcError) {
+        // If running outside GitHub Actions, use a placeholder
+        core.warning('Could not get OIDC token - running outside GitHub Actions?');
+        oidcToken = 'mock-oidc-token-for-local-testing';
+    }
+    // Build pre-verify request
+    const preVerifyRequest = {
+        domain: inputs.domain,
+        domain_signature: domainSignature,
+        oidc_token: oidcToken,
+        github_context: {
+            repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
+            commit_sha: github.context.sha,
+            workflow_ref: github.context.ref,
+            run_id: github.context.runId,
+            workflow: github.context.workflow,
+        },
+        files_manifest: {
+            manifest_hash: manifestHash,
+            total_files: filesManifest.total_files,
+            total_size_bytes: filesManifest.total_size_bytes,
+        },
+        network: inputs.network,
+    };
+    debugLog('Pre-verify request', {
+        domain: preVerifyRequest.domain,
+        github_repo: preVerifyRequest.github_context.repository,
+        manifest_hash: preVerifyRequest.files_manifest.manifest_hash.substring(0, 16) + '...',
+    });
+    // Call pre-verify endpoint (SERVER ONLY READS - NO WRITES!)
+    const preVerifyResult = await teeClient.preVerify(preVerifyRequest);
+    if (!(0, tee_server_client_1.isPreVerifySuccess)(preVerifyResult)) {
+        throw new Error(`Pre-verification failed: ${preVerifyResult.error}\n\n` +
+            `${preVerifyResult.message}\n\n` +
+            `This check runs BEFORE uploading to Walrus to avoid wasted storage costs.\n` +
+            `Please fix the issue above and try again.`);
+    }
+    core.info(`✓ Pre-verification passed (server read-only check)`);
+    core.info(`  Site Record: ${preVerifyResult.domain_info.site_record_id.substring(0, 16)}...`);
+    core.info(`  Current Version: ${preVerifyResult.domain_info.current_version}`);
+    const siteRecordId = preVerifyResult.domain_info.site_record_id;
+    const currentVersion = preVerifyResult.domain_info.current_version;
+    debugLog('Pre-verify passed', {
+        request_id: preVerifyResult.request_id,
+        site_record_id: siteRecordId,
+        current_version: currentVersion,
+        checks: preVerifyResult.checks,
+    });
+    // Step 4: SLSA Provenance
+    core.info('Step 4: Create SLSA Provenance');
     const slsaProvenance = (0, provenance_1.createSLSAProvenanceV11)(filesManifest, github.context);
     const githubContext = {
         actor: github.context.actor,
@@ -98541,8 +98456,8 @@ async function executeDeployment(inputs) {
         builderId: slsaProvenance.predicate?.runDetails?.builder?.id,
         cosignSignature: attestedProvenance.cosign_signature
     });
-    // Step 4: Walrus Upload (User-Controlled)
-    core.info('Step 4: Upload to Walrus');
+    // Step 5: Upload to Walrus (USER CONTROLLED - Uses user's credentials)
+    core.info('Step 5: Upload to Walrus (User Controlled)');
     const walrusClient = new walrus_client_1.WalrusClient({
         publisherUrl: inputs.walrusPublisherUrl,
         aggregatorUrl: inputs.walrusAggregatorUrl,
@@ -98570,14 +98485,14 @@ async function executeDeployment(inputs) {
     const quiltDeployment = await walrusClient.uploadTwoQuiltStructure(filesToUpload, provenanceData, {
         domain: inputs.domain,
         network: inputs.network,
-        deployment_type: 'cryptoguard-user-based',
+        deployment_type: 'cryptoguard-trustless',
     });
     // Build blob mapping
     const blobMapping = {};
     for (const file of quiltDeployment.contentQuilt.manifest.files) {
         blobMapping[file.path] = file.blobId;
     }
-    const provenanceBlob = quiltDeployment.metadataQuilt.manifest.files.find(f => f.path === 'provenance.json');
+    const provenanceBlob = quiltDeployment.metadataQuilt.manifest.files.find((f) => f.path === 'provenance.json');
     if (!provenanceBlob) {
         throw new walrus_client_1.WalrusError('Provenance blob not found in metadata quilt', 'QUILT_STRUCTURE_ERROR', { metadataQuilt: quiltDeployment.metadataQuilt });
     }
@@ -98592,30 +98507,8 @@ async function executeDeployment(inputs) {
         total_size_kb: (totalSize / 1024).toFixed(1),
         blob_mapping: blobMapping
     });
-    // Step 5: TEE Attestation Request
-    core.info('Step 5: TEE Server Attestation');
-    // Initialize TEE client
-    const teeClient = new tee_server_client_1.TEEServerClient({
-        server_url: inputs.teeServerUrl,
-        timeout: 300000,
-        max_retries: 3,
-        retry_delay_ms: 2000
-    });
-    // Sign domain ownership message
-    const teedomainSignature = await (0, crypto_utils_1.signMessage)(domainOwnershipMessage, inputs.privateKey);
-    // Compute manifest hash (SHA-256 of the manifest JSON)
-    const manifestJson = JSON.stringify({
-        files: filesManifest.files,
-        total_files: filesManifest.total_files,
-        total_size_bytes: filesManifest.total_size_bytes
-    });
-    const manifestHash = (0, crypto_1.createHash)('sha256').update(manifestJson).digest('hex');
-    debugLog('TEE preparation', {
-        domain_signature: teedomainSignature.substring(0, 32) + '...',
-        manifest_hash: manifestHash.substring(0, 32) + '...',
-        tee_server: inputs.teeServerUrl
-    });
-    // Initialize Sui client
+    // Step 6: Update Blockchain Directly (USER SIGNED - No server involvement!)
+    core.info('Step 6: Update Blockchain (User Signed - Trustless)');
     const suiClient = new sui_client_1.CryptoGuardSuiClient({
         rpcUrl: inputs.suiRpcUrl,
         network: inputs.network,
@@ -98628,114 +98521,39 @@ async function executeDeployment(inputs) {
         registryId: inputs.registryId,
         gasBudget: inputs.gasBudget
     });
-    // Look up domain (needed for both flows)
-    const domainRecord = await suiClient.lookupDomain(inputs.domain);
-    if (!domainRecord) {
-        throw new sui_client_1.SuiError(`Domain ${inputs.domain} is not registered.\n\nRegister first: npm install -g @cryptoguard/cli && cryptoguard register ${inputs.domain}`, 'DOMAIN_NOT_REGISTERED', { domain: inputs.domain });
-    }
-    debugLog('Domain record found', {
-        id: domainRecord.id,
-        owner: domainRecord.owner,
-        currentVersion: domainRecord.currentVersion.toString()
-    });
-    // Build TEE attestation request for the /attest endpoint (per TEE_ATTESTATION_ARCHITECTURE.md)
-    const teeAttestationRequest = {
-        domain: inputs.domain,
-        domain_signature: teedomainSignature,
-        site_record_id: domainRecord.id,
+    // Build deployment data for direct update
+    const deploymentData = {
         content_quilt_id: quiltDeployment.contentQuilt.blobId,
         metadata_quilt_id: quiltDeployment.metadataQuilt.blobId,
         provenance_blob_id: provenanceBlob.blobId,
-        files_manifest: {
-            manifest_hash: manifestHash,
-            total_files: filesManifest.total_files,
-            total_size_bytes: filesManifest.total_size_bytes,
-        },
-        github_context: {
-            repository: `${github.context.repo.owner}/${github.context.repo.repo}`,
-            commit_sha: github.context.sha,
-            workflow_ref: github.context.ref,
-            run_id: github.context.runId,
-            workflow: github.context.workflow,
-        },
-        client_info: {
-            user_agent: `CryptoGuard-Action/0.2.0`,
-            action_version: '0.2.0',
-        },
-        network: inputs.network,
+        files_manifest_hash: manifestHash,
+        total_files: filesManifest.total_files,
+        total_size_bytes: filesManifest.total_size_bytes,
+        github_repo: `${github.context.repo.owner}/${github.context.repo.repo}`,
+        github_commit_sha: github.context.sha,
+        github_workflow_ref: github.context.ref,
+        github_run_id: github.context.runId,
     };
-    if (inputs.verboseAttestation) {
-        debugLog('TEE attestation request (verbose)', {
-            domain: teeAttestationRequest.domain,
-            site_record_id: teeAttestationRequest.site_record_id,
-            content_quilt_id: teeAttestationRequest.content_quilt_id,
-            metadata_quilt_id: teeAttestationRequest.metadata_quilt_id,
-            files_manifest: teeAttestationRequest.files_manifest,
-            github_context: teeAttestationRequest.github_context,
-        });
-    }
-    // Request TEE attestation from server (POST /api/v1/attest)
-    debugLog('Sending TEE attestation request', {
-        endpoint: `${inputs.teeServerUrl}/attest`,
-        domain: teeAttestationRequest.domain,
-        site_record_id: teeAttestationRequest.site_record_id,
-        content_quilt_id: teeAttestationRequest.content_quilt_id.substring(0, 16) + '...',
-        metadata_quilt_id: teeAttestationRequest.metadata_quilt_id.substring(0, 16) + '...',
-        provenance_blob_id: teeAttestationRequest.provenance_blob_id.substring(0, 16) + '...',
-        manifest_hash: teeAttestationRequest.files_manifest.manifest_hash.substring(0, 16) + '...',
-        github_repo: teeAttestationRequest.github_context.repository,
+    debugLog('Direct update deployment data', {
+        site_record_id: siteRecordId,
+        content_quilt_id: deploymentData.content_quilt_id.substring(0, 16) + '...',
+        metadata_quilt_id: deploymentData.metadata_quilt_id.substring(0, 16) + '...',
+        provenance_blob_id: deploymentData.provenance_blob_id.substring(0, 16) + '...',
+        manifest_hash: deploymentData.files_manifest_hash.substring(0, 16) + '...',
+        github_repo: deploymentData.github_repo,
     });
-    core.info('   Requesting TEE attestation from server...');
-    const attestationResponse = await teeClient.requestAttestation(teeAttestationRequest);
-    if (!(0, tee_attestation_1.isSuccessfulAttestation)(attestationResponse)) {
-        const errorMsg = attestationResponse.error_code
-            ? (0, tee_attestation_1.getErrorMessage)(attestationResponse.error_code)
-            : attestationResponse.error || 'Unknown error';
-        throw new Error(`TEE attestation failed: ${errorMsg}`);
-    }
-    const teeAttestationProof = attestationResponse.attestation;
-    core.info('✓ TEE attestation received');
-    debugLog('TEE attestation received', {
-        payload_hash: teeAttestationProof.payload.files_manifest_hash,
-        signature: teeAttestationProof.signature.substring(0, 32) + '...',
-        measurement: teeAttestationProof.enclave_measurement.substring(0, 32) + '...',
-        public_key: teeAttestationProof.public_key.substring(0, 32) + '...',
-    });
-    if (inputs.verboseAttestation && attestationResponse.verification_summary) {
-        core.info('   Verification summary:');
-        core.info(`     Domain verified: ${attestationResponse.verification_summary.domain_verified}`);
-        core.info(`     GitHub verified: ${attestationResponse.verification_summary.github_verified}`);
-        core.info(`     Provenance verified: ${attestationResponse.verification_summary.provenance_verified}`);
-        core.info(`     Walrus blobs verified: ${attestationResponse.verification_summary.walrus_blobs_verified}`);
-    }
-    // Step 6: Submit attestation to smart contract for on-chain verification
-    core.info('Step 6: Submit to Blockchain');
-    core.info('   Submitting TEE attestation to smart contract...');
-    const attestationTxResult = await suiClient.updateSiteWithTEEAttestation(inputs.privateKey, domainRecord.id, teeAttestationProof, {
-        maxAttestationAge: 300, // 5 minutes
-        expectedEnclaveMeasurement: inputs.expectedEnclaveMeasurement,
-        trustedTeeRegistryId: inputs.trustedTeeRegistryId || undefined,
-    });
-    if (!attestationTxResult.success) {
-        throw new Error(`On-chain TEE verification failed: ${attestationTxResult.error}`);
-    }
-    const txResult = {
-        digest: attestationTxResult.transactionDigest,
-        status: attestationTxResult.success ? 'success' : 'failure',
-        newVersion: String(attestationTxResult.newVersion),
-        gasUsed: attestationTxResult.gasUsed,
-    };
-    const onChainVerification = attestationTxResult.onChainVerification;
-    core.info(`✓ TEE attestation verified on-chain`);
-    core.info(`  Version: ${domainRecord.currentVersion} → ${txResult.newVersion}`);
+    // Submit direct update (USER SIGNS WITH THEIR PRIVATE KEY!)
+    core.info('   Signing transaction with your private key...');
+    const txResult = await suiClient.updateSiteDirect(inputs.privateKey, siteRecordId, deploymentData);
+    core.info(`✓ Blockchain updated (you signed it!)`);
+    core.info(`  Version: ${currentVersion} → ${txResult.newVersion}`);
     core.info(`  Gas: ${(Number(txResult.gasUsed) / 1_000_000_000).toFixed(4)} SUI`);
     core.info(`  TX: ${txResult.digest.substring(0, 16)}...`);
-    debugLog('TEE attestation blockchain result', {
+    debugLog('Blockchain transaction result', {
         digest: txResult.digest,
         status: txResult.status,
         newVersion: txResult.newVersion,
         gasUsed: txResult.gasUsed,
-        onChainVerification,
         explorer: `https://suiscan.xyz/${inputs.network}/tx/${txResult.digest}`
     });
     // Return deployment result
@@ -98750,26 +98568,19 @@ async function executeDeployment(inputs) {
             content_quilt_id: quiltDeployment.contentQuilt.blobId,
             metadata_quilt_id: quiltDeployment.metadataQuilt.blobId,
         },
-        teeVerification: {
-            request_id: attestationResponse.request_id,
-            domain_verified: attestationResponse.verification_summary?.domain_verified || false,
-            github_verified: attestationResponse.verification_summary?.github_verified || false,
-            provenance_verified: attestationResponse.verification_summary?.provenance_verified || false,
-            tee_attestation: {
-                measurement_hash: teeAttestationProof.enclave_measurement,
-                attestation_signature: teeAttestationProof.signature,
-                timestamp: attestationResponse.verification_summary?.timestamp || new Date().toISOString(),
-            },
+        preVerification: {
+            request_id: preVerifyResult.request_id,
+            site_record_id: siteRecordId,
+            current_version: currentVersion,
+            checks: preVerifyResult.checks,
         },
         blockchainTransaction: {
             digest: txResult.digest,
             status: txResult.status,
             new_version: txResult.newVersion || '0',
             gas_used: txResult.gasUsed || 0,
-            site_record_id: domainRecord.id,
+            site_record_id: siteRecordId,
         },
-        teeAttestationProof,
-        onChainVerification,
     };
 }
 /**
@@ -98789,7 +98600,7 @@ async function createGitHubIntegrations(inputs, result) {
                 ...github.context.repo,
                 deployment_id: github.context.payload.deployment.id,
                 state: 'success',
-                description: 'CryptoGuard User-Based deployment complete - You own your domain!',
+                description: 'CryptoGuard Trustless deployment complete - You own everything!',
                 environment_url: `https://${inputs.domain}`,
                 log_url: result.blockchainTransaction?.digest
                     ? `https://suiscan.xyz/${inputs.network}/tx/${result.blockchainTransaction.digest}`
@@ -98799,34 +98610,34 @@ async function createGitHubIntegrations(inputs, result) {
         // Create comprehensive check run
         await octokit.rest.checks.create({
             ...github.context.repo,
-            name: 'CryptoGuard User-Based Deployment',
+            name: 'CryptoGuard Trustless Deployment',
             head_sha: github.context.sha,
             status: 'completed',
             conclusion: 'success',
             output: {
-                title: 'User-Based Deployment Complete - You Own Your Domain!',
+                title: 'Trustless Deployment Complete - You Own Everything!',
                 summary: `
-## 🔑 User-Based Deployment Results
+## 🔐 Trustless Deployment Results
 
 | Component | Status | Details |
 |-----------|---------|---------|
-| Domain Verification | ✅ Verified | GitHub Attestation: \`${result.githubAttestation?.repository}@${result.githubAttestation?.run_id}\` |
-| Files Processed | ✅ Complete | ${result.filesManifest?.total_files} files, ${Math.round(result.filesManifest?.total_size_bytes / 1024)}KB |
-| SLSA Provenance | ✅ Level 3 | Sigstore-signed with transparency log |
-| Walrus Upload | ✅ User-Controlled | ${result.walrusUpload?.total_blobs} blobs uploaded by YOU |
-| TEE Verification | ✅ Verified | Read-only verification, no uploads |
-| Blockchain Transaction | ✅ User-Signed | Version ${result.blockchainTransaction?.new_version}, Gas: ${result.blockchainTransaction?.gas_used} MIST |
+| GitHub OIDC | ✅ Verified | \`${result.githubAttestation?.repository}@${result.githubAttestation?.run_id}\` |
+| File Manifest | ✅ Complete | ${result.filesManifest?.total_files} files, ${Math.round(result.filesManifest?.total_size_bytes / 1024)}KB |
+| Pre-Verify | ✅ Passed | Server read-only check |
+| SLSA Provenance | ✅ Level 3 | Sigstore-signed |
+| Walrus Upload | ✅ **You Uploaded** | ${result.walrusUpload?.total_blobs} blobs |
+| Blockchain TX | ✅ **You Signed** | Version ${result.blockchainTransaction?.new_version} |
 
 **🔍 Transaction**: [View on Explorer](https://suiscan.xyz/${inputs.network}/tx/${result.blockchainTransaction?.digest})
 **📜 Provenance**: [View on Walrus](https://aggregator.walrus-testnet.walrus.space/v1/${result.walrusUpload?.provenance_blob_id})
 **🌐 Site**: https://${inputs.domain}
 
-### 🔑 User-Based Architecture Benefits
+### 🔐 Trustless Architecture
 
-✅ **You own your domain** on the blockchain
-✅ **You control your storage** on Walrus
-✅ **You sign your transactions** with your private key
-✅ **Full Web3 self-sovereignty** - no admin control
+✅ **You signed the blockchain transaction** with your private key
+✅ **You uploaded to Walrus** - no server touched your files
+✅ **Server only read** - verified your ownership, no writes
+✅ **Full self-sovereignty** - you own your domain, your content, your keys
         `
             }
         });
@@ -98835,28 +98646,22 @@ async function createGitHubIntegrations(inputs, result) {
             await octokit.rest.issues.createComment({
                 ...github.context.repo,
                 issue_number: github.context.issue.number,
-                body: `## 🔑 CryptoGuard User-Based Deployment Complete
+                body: `## 🔐 CryptoGuard Trustless Deployment Complete
 
 ✅ **Domain**: ${inputs.domain}
-🛡️ **GitHub Attestation**: \`${result.githubAttestation?.repository}@${result.githubAttestation?.run_id}\`
-📦 **Files**: ${result.filesManifest?.total_files} files uploaded to Walrus by YOU
-🐋 **Walrus Blobs**: ${result.walrusUpload?.total_blobs} blobs under YOUR control
-⛓️ **Blockchain Transaction**: [${result.blockchainTransaction?.digest.substring(0, 12)}...](https://suiscan.xyz/${inputs.network}/tx/${result.blockchainTransaction?.digest})
+🛡️ **Pre-Verified**: Server read-only check passed
+📦 **Files**: ${result.filesManifest?.total_files} files **YOU uploaded** to Walrus
+⛓️ **Transaction**: [${result.blockchainTransaction?.digest.substring(0, 12)}...](https://suiscan.xyz/${inputs.network}/tx/${result.blockchainTransaction?.digest}) - **YOU signed**
 🔢 **Version**: ${result.blockchainTransaction?.new_version}
 💰 **Gas Used**: ${result.blockchainTransaction?.gas_used} MIST
 🌐 **Live Site**: [${inputs.domain}](https://${inputs.domain})
 
-### 🔑 User-Based Architecture
+### 🔐 Trustless Verification
 
-✅ **You own your domain** - The SiteRecord is owned by YOUR wallet address
-✅ **You control your storage** - All files uploaded to Walrus by YOUR GitHub Action
-✅ **You sign your transactions** - Blockchain transaction signed with YOUR private key
-✅ **Full Web3 self-sovereignty** - No admin, no centralization, just YOU
-
-### 🛡️ Security Verification
-
-All operations verified by TEE Server with GitHub OIDC and Sigstore SLSA Level 3 attestation.
-Browser extension users will see **🛡️ VERIFIED** status.`
+✅ **You signed the transaction** - your private key, your control
+✅ **You uploaded to Walrus** - server never touched your files
+✅ **Server only verified** - read-only ownership check
+✅ **Full Web3 self-sovereignty** - no middleman, just you`
             });
         }
     }
@@ -100685,6 +100490,132 @@ class CryptoGuardSuiClient {
             Number(effects.gasUsed.storageCost || 0) -
             Number(effects.gasUsed.storageRebate || 0));
     }
+    // ============================================================================
+    // Trustless Direct Update Methods
+    // ============================================================================
+    /**
+     * Direct site update without server attestation.
+     * The user signs and submits the transaction directly using their own private key.
+     *
+     * This is the trustless flow where:
+     * 1. Pre-verification is done by the server (read-only check)
+     * 2. User uploads to Walrus with their own credentials
+     * 3. User signs and submits blockchain transaction directly
+     *
+     * No server involvement in blockchain writes - fully trustless!
+     *
+     * @param privateKey - Owner's private key for transaction signing
+     * @param siteRecordId - Sui object ID of the site record
+     * @param deploymentData - Deployment data including quilt IDs and metadata
+     * @returns Transaction result
+     */
+    async updateSiteDirect(privateKey, siteRecordId, deploymentData) {
+        try {
+            core.info('🔐 Submitting direct site update (trustless - user signed)');
+            // Parse private key and get user address
+            const keypair = this.parsePrivateKey(privateKey);
+            const userAddress = keypair.getPublicKey().toSuiAddress();
+            core.debug(`User address: ${userAddress}`);
+            core.debug(`Site record ID: ${siteRecordId}`);
+            // Verify user owns the SiteRecord
+            const siteRecord = await this.client.getObject({
+                id: siteRecordId,
+                options: { showOwner: true, showContent: true },
+            });
+            if (!siteRecord.data) {
+                throw new SuiError(`SiteRecord ${siteRecordId} not found`, 'SITE_RECORD_NOT_FOUND', { siteRecordId });
+            }
+            // Check ownership
+            const owner = siteRecord.data.owner?.AddressOwner ||
+                siteRecord.data.owner?.ObjectOwner;
+            if (owner !== userAddress) {
+                throw new SuiError(`SiteRecord owned by ${owner}, signed by ${userAddress}`, 'UNAUTHORIZED', { owner, signer: userAddress });
+            }
+            // Build transaction
+            const tx = new transactions_1.Transaction();
+            tx.setGasBudget(this.gasBudget);
+            core.debug(`Building update_site_direct transaction`);
+            core.debug(`Package ID: ${this.packageId}`);
+            // Call smart contract function for direct update
+            // This function updates the site without requiring TEE attestation
+            // The contract verifies the caller is the domain owner
+            tx.moveCall({
+                target: `${this.packageId}::site_registry::update_site_direct`,
+                arguments: [
+                    tx.object(siteRecordId), // site_record: &mut SiteRecord
+                    tx.pure.string(deploymentData.content_quilt_id), // content_quilt_id
+                    tx.pure.string(deploymentData.metadata_quilt_id), // metadata_quilt_id
+                    tx.pure.string(deploymentData.provenance_blob_id), // provenance_blob_id
+                    tx.pure.string(deploymentData.files_manifest_hash), // files_manifest_hash
+                    tx.pure.u64(deploymentData.total_files), // total_files
+                    tx.pure.u64(deploymentData.total_size_bytes), // total_size_bytes
+                    tx.pure.string(deploymentData.github_repo), // github_repo
+                    tx.pure.string(deploymentData.github_commit_sha), // github_commit_sha
+                    tx.pure.string(deploymentData.github_workflow_ref), // github_workflow_ref
+                    tx.pure.u64(deploymentData.github_run_id), // github_run_id
+                    tx.object('0x6'), // clock: &Clock
+                ],
+            });
+            // Sign and execute transaction
+            core.debug('Signing and executing transaction');
+            const result = await this.client.signAndExecuteTransaction({
+                signer: keypair,
+                transaction: tx,
+                options: {
+                    showEffects: true,
+                    showEvents: true,
+                    showObjectChanges: true,
+                },
+            });
+            core.debug(`Transaction submitted: ${result.digest}`);
+            // Check transaction status
+            if (result.effects?.status?.status !== 'success') {
+                const error = result.effects?.status?.error || 'Unknown error';
+                throw new SuiError(`Transaction failed: ${error}`, 'TRANSACTION_FAILED', { digest: result.digest, error });
+            }
+            // Extract new version from events
+            let newVersion = '0';
+            if (result.events) {
+                const updateEvent = result.events.find((e) => e.type.includes('SiteUpdated') ||
+                    e.type.includes('SiteDataUpdated') ||
+                    e.type.includes('::site_registry::'));
+                if (updateEvent && updateEvent.parsedJson) {
+                    const parsedJson = updateEvent.parsedJson;
+                    newVersion = String(parsedJson.version || parsedJson.new_version || parsedJson.newVersion || '0');
+                }
+            }
+            // Calculate gas used
+            const gasUsed = this.calculateGasUsed(result.effects);
+            core.info(`✅ Direct site update successful`);
+            core.info(`   Transaction: ${result.digest}`);
+            core.info(`   New Version: ${newVersion}`);
+            core.info(`   Gas Used: ${gasUsed} MIST`);
+            return {
+                digest: result.digest,
+                status: 'success',
+                newVersion,
+                gasUsed,
+            };
+        }
+        catch (error) {
+            if (error instanceof SuiError) {
+                throw error;
+            }
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            // Parse common error types
+            if (errorMessage.includes('Insufficient gas')) {
+                throw new SuiError('Insufficient SUI tokens in wallet for gas fees', 'INSUFFICIENT_GAS', { error: errorMessage });
+            }
+            else if (errorMessage.includes('Version mismatch') ||
+                errorMessage.includes('object version')) {
+                throw new SuiError('Concurrent deployment detected - SiteRecord version mismatch', 'VERSION_CONFLICT', { error: errorMessage });
+            }
+            else if (errorMessage.includes('not found')) {
+                throw new SuiError('SiteRecord not found on blockchain', 'SITE_RECORD_NOT_FOUND', { error: errorMessage });
+            }
+            throw new SuiError(`Direct site update failed: ${errorMessage}`, 'UPDATE_FAILED', { siteRecordId, error: errorMessage });
+        }
+    }
 }
 exports.CryptoGuardSuiClient = CryptoGuardSuiClient;
 
@@ -100736,8 +100667,13 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.TEEServerClient = exports.TEETimeoutError = exports.TEEValidationError = exports.TEECommunicationError = exports.TEEServerError = void 0;
+exports.isPreVerifySuccess = isPreVerifySuccess;
 const core = __importStar(__nccwpck_require__(50099));
 const attestation_serializer_1 = __nccwpck_require__(42949);
+// Type guard for pre-verify response
+function isPreVerifySuccess(response) {
+    return response.success === true;
+}
 /**
  * Custom TEE Server Error classes
  */
@@ -101002,6 +100938,143 @@ class TEEServerClient {
             }
         }
         throw lastError;
+    }
+    // =========================================================================
+    // Pre-Verification Methods (Pre-flight check before Walrus upload)
+    // =========================================================================
+    /**
+     * Pre-flight verification before Walrus upload.
+     *
+     * This method verifies domain ownership and GitHub OIDC BEFORE the client
+     * uploads files to Walrus. This prevents wasted storage costs if verification
+     * would fail later.
+     *
+     * @param request - Pre-verification request with domain and authentication data
+     * @returns Pre-verification response with token for deploy phase
+     * @throws TEEValidationError if the request is invalid
+     * @throws TEECommunicationError if communication with server fails
+     *
+     * @example
+     * ```typescript
+     * const preVerifyResult = await teeClient.preVerify({
+     *   domain: 'example.com',
+     *   domain_signature: '0x...',
+     *   oidc_token: 'eyJhbGci...',
+     *   github_context: { repository: 'owner/repo', ... },
+     *   files_manifest: { manifest_hash: 'sha256:...', ... },
+     *   network: 'testnet'
+     * });
+     *
+     * if (isPreVerifySuccess(preVerifyResult)) {
+     *   // Safe to proceed with Walrus upload
+     *   const walrusResult = await walrusClient.upload(...);
+     *   // Then submit attestation request
+     * }
+     * ```
+     */
+    async preVerify(request) {
+        const requestId = this.generateRequestId();
+        return this.withRetry(async () => {
+            try {
+                core.info('🔍 Starting pre-flight verification');
+                core.info(`TEE Server: ${this.config.server_url}`);
+                core.info(`Domain: ${request.domain}`);
+                // Validate request
+                this.validatePreVerifyRequest(request);
+                // Prepare request headers
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'CryptoGuard-Action/0.2.0',
+                    'X-Request-ID': requestId,
+                    'X-CryptoGuard-Version': '0.2.0',
+                    'X-GitHub-Run-ID': String(request.github_context.run_id),
+                };
+                // Make HTTP request to TEE server pre-verify endpoint
+                const response = await fetch(`${this.config.server_url}pre-verify`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(request),
+                    signal: AbortSignal.timeout(this.config.timeout),
+                });
+                if (!response.ok) {
+                    const errorBody = await response.text().catch(() => 'Unknown error');
+                    if (response.status === 422) {
+                        throw new TEEValidationError(`Pre-verification validation failed: ${errorBody}`);
+                    }
+                    else if (response.status === 503) {
+                        throw new TEECommunicationError(`Server temporarily unavailable: ${errorBody}`, true);
+                    }
+                    else if (response.status >= 500) {
+                        throw new TEECommunicationError(`Server error: ${errorBody}`, true);
+                    }
+                    else {
+                        throw new TEEServerError(`Pre-verification request failed: ${errorBody}`, 'PRE_VERIFY_FAILED', response.status, false);
+                    }
+                }
+                const result = await response.json();
+                if (result.success) {
+                    core.info('✅ Pre-verification passed');
+                    core.info(`Domain registered: ${result.checks.domain_registered}`);
+                    core.info(`Domain signature valid: ${result.checks.domain_signature_valid}`);
+                    core.info(`GitHub OIDC valid: ${result.checks.github_oidc_valid}`);
+                    core.info(`Site Record ID: ${result.domain_info.site_record_id}`);
+                    core.info(`Current version: ${result.domain_info.current_version}`);
+                    core.info(`Token expires: ${new Date(result.pre_verify_token.expires_at).toISOString()}`);
+                }
+                else {
+                    core.warning(`⚠️ Pre-verification failed: ${result.error}`);
+                    core.warning(`Message: ${result.message}`);
+                    if (result.checks) {
+                        core.warning(`Partial checks: ${JSON.stringify(result.checks)}`);
+                    }
+                }
+                return result;
+            }
+            catch (error) {
+                if (error instanceof TEEServerError) {
+                    throw error;
+                }
+                else if (error instanceof TypeError &&
+                    (error.message.includes('AbortError') || error.message.includes('timeout'))) {
+                    throw new TEETimeoutError(`Pre-verification request timed out after ${this.config.timeout}ms`);
+                }
+                else {
+                    throw new TEECommunicationError(`Pre-verification request failed: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+        });
+    }
+    /**
+     * Validate pre-verify request
+     */
+    validatePreVerifyRequest(request) {
+        if (!request.domain) {
+            throw new TEEValidationError('Domain is required');
+        }
+        if (!request.domain_signature) {
+            throw new TEEValidationError('Domain signature is required');
+        }
+        if (!request.oidc_token) {
+            throw new TEEValidationError('OIDC token is required');
+        }
+        if (!request.github_context) {
+            throw new TEEValidationError('GitHub context is required');
+        }
+        if (!request.github_context.repository) {
+            throw new TEEValidationError('GitHub repository is required');
+        }
+        if (!request.github_context.run_id) {
+            throw new TEEValidationError('GitHub run_id is required');
+        }
+        if (!request.files_manifest) {
+            throw new TEEValidationError('Files manifest is required');
+        }
+        if (!request.files_manifest.manifest_hash) {
+            throw new TEEValidationError('Manifest hash is required');
+        }
+        if (!['testnet', 'mainnet'].includes(request.network)) {
+            throw new TEEValidationError('Network must be either "testnet" or "mainnet"');
+        }
     }
     // =========================================================================
     // TEE Attestation Flow Methods (Phase 2 - TEE Integration Plan)
@@ -101288,58 +101361,6 @@ class TEEServerClient {
     }
 }
 exports.TEEServerClient = TEEServerClient;
-
-
-/***/ }),
-
-/***/ 91831:
-/***/ ((__unused_webpack_module, exports) => {
-
-"use strict";
-
-/**
- * TEE Attestation Types
- *
- * These types define the interface between the GitHub Action,
- * TEE Server (Nitro Enclave), and Smart Contract for
- * cryptographically verified deployments.
- *
- * @module types/tee-attestation
- * @see TEE_ATTESTATION_INTEGRATION_PLAN.md - Phase 1, Step 1.1
- */
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.isSuccessfulAttestation = isSuccessfulAttestation;
-exports.isSuccessfulSubmission = isSuccessfulSubmission;
-exports.getErrorMessage = getErrorMessage;
-/**
- * Type guard to check if a response is a successful attestation.
- */
-function isSuccessfulAttestation(response) {
-    return response.success === true && response.attestation !== undefined;
-}
-/**
- * Type guard to check if a submission result was successful.
- */
-function isSuccessfulSubmission(result) {
-    return result.success === true;
-}
-/**
- * Get human-readable error message for an error code.
- */
-function getErrorMessage(code) {
-    const messages = {
-        DOMAIN_NOT_REGISTERED: 'Domain is not registered. Please register the domain first using the CLI.',
-        DOMAIN_VERIFICATION_FAILED: 'Domain ownership verification failed. Ensure the domain signature is valid.',
-        GITHUB_VERIFICATION_FAILED: 'GitHub OIDC token validation failed. Ensure the workflow has proper permissions.',
-        PROVENANCE_VERIFICATION_FAILED: 'SLSA provenance verification failed. Check build attestation.',
-        WALRUS_VERIFICATION_FAILED: 'Walrus blob verification failed. Ensure all blobs are uploaded and accessible.',
-        ATTESTATION_GENERATION_FAILED: 'TEE enclave failed to generate attestation. Please retry.',
-        ENCLAVE_ERROR: 'Internal enclave error. Contact support if this persists.',
-        TIMEOUT: 'Request timed out. Please retry with a longer timeout.',
-        INTERNAL_ERROR: 'An unexpected error occurred. Contact support.',
-    };
-    return messages[code] || `Unknown error: ${code}`;
-}
 
 
 /***/ }),

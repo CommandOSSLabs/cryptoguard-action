@@ -160,4 +160,32 @@ export declare class CryptoGuardSuiClient {
      * @private
      */
     private calculateGasUsed;
+    /**
+     * Direct site update without server attestation.
+     * The user signs and submits the transaction directly using their own private key.
+     *
+     * This is the trustless flow where:
+     * 1. Pre-verification is done by the server (read-only check)
+     * 2. User uploads to Walrus with their own credentials
+     * 3. User signs and submits blockchain transaction directly
+     *
+     * No server involvement in blockchain writes - fully trustless!
+     *
+     * @param privateKey - Owner's private key for transaction signing
+     * @param siteRecordId - Sui object ID of the site record
+     * @param deploymentData - Deployment data including quilt IDs and metadata
+     * @returns Transaction result
+     */
+    updateSiteDirect(privateKey: string, siteRecordId: string, deploymentData: {
+        content_quilt_id: string;
+        metadata_quilt_id: string;
+        provenance_blob_id: string;
+        files_manifest_hash: string;
+        total_files: number;
+        total_size_bytes: number;
+        github_repo: string;
+        github_commit_sha: string;
+        github_workflow_ref: string;
+        github_run_id: number;
+    }): Promise<TransactionResult>;
 }

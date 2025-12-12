@@ -130,6 +130,59 @@ export interface TEEStatusResponse {
     result?: TEEDeploymentResponse;
     error?: string;
 }
+export interface PreVerifyRequest {
+    domain: string;
+    domain_signature: string;
+    oidc_token: string;
+    github_context: {
+        repository: string;
+        commit_sha: string;
+        workflow_ref: string;
+        run_id: number;
+        workflow: string;
+    };
+    files_manifest: {
+        manifest_hash: string;
+        total_files: number;
+        total_size_bytes: number;
+    };
+    network: string;
+}
+export interface PreVerifyChecks {
+    blockchain_available: boolean;
+    domain_registered: boolean;
+    domain_signature_valid: boolean;
+    github_oidc_valid: boolean;
+}
+export interface PreVerifyDomainInfo {
+    site_record_id: string;
+    owner: string;
+    current_version: number;
+}
+export interface PreVerifyToken {
+    token_id: string;
+    expires_at: number;
+    signature: string;
+    server_public_key: string;
+}
+export interface PreVerifySuccessResponse {
+    success: true;
+    request_id: string;
+    message: string;
+    checks: PreVerifyChecks;
+    domain_info: PreVerifyDomainInfo;
+    pre_verify_token: PreVerifyToken;
+    verified_at: string;
+}
+export interface PreVerifyErrorResponse {
+    success: false;
+    error: string;
+    message: string;
+    request_id: string;
+    checks?: Partial<PreVerifyChecks>;
+}
+export type PreVerifyResponse = PreVerifySuccessResponse | PreVerifyErrorResponse;
+export declare function isPreVerifySuccess(response: PreVerifyResponse): response is PreVerifySuccessResponse;
 /**
  * Custom TEE Server Error classes
  */
@@ -187,6 +240,41 @@ export declare class TEEServerClient {
      * Retry wrapper with exponential backoff
      */
     private withRetry;
+    /**
+     * Pre-flight verification before Walrus upload.
+     *
+     * This method verifies domain ownership and GitHub OIDC BEFORE the client
+     * uploads files to Walrus. This prevents wasted storage costs if verification
+     * would fail later.
+     *
+     * @param request - Pre-verification request with domain and authentication data
+     * @returns Pre-verification response with token for deploy phase
+     * @throws TEEValidationError if the request is invalid
+     * @throws TEECommunicationError if communication with server fails
+     *
+     * @example
+     * ```typescript
+     * const preVerifyResult = await teeClient.preVerify({
+     *   domain: 'example.com',
+     *   domain_signature: '0x...',
+     *   oidc_token: 'eyJhbGci...',
+     *   github_context: { repository: 'owner/repo', ... },
+     *   files_manifest: { manifest_hash: 'sha256:...', ... },
+     *   network: 'testnet'
+     * });
+     *
+     * if (isPreVerifySuccess(preVerifyResult)) {
+     *   // Safe to proceed with Walrus upload
+     *   const walrusResult = await walrusClient.upload(...);
+     *   // Then submit attestation request
+     * }
+     * ```
+     */
+    preVerify(request: PreVerifyRequest): Promise<PreVerifyResponse>;
+    /**
+     * Validate pre-verify request
+     */
+    private validatePreVerifyRequest;
     /**
      * Request TEE attestation for deployment verification.
      *
