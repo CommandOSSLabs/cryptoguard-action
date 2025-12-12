@@ -100537,25 +100537,24 @@ class CryptoGuardSuiClient {
             // Build transaction
             const tx = new transactions_1.Transaction();
             tx.setGasBudget(this.gasBudget);
-            core.debug(`Building update_site_direct transaction`);
+            core.debug(`Building update_site_data_with_quilt transaction`);
             core.debug(`Package ID: ${this.packageId}`);
-            // Call smart contract function for direct update
-            // This function updates the site without requiring TEE attestation
-            // The contract verifies the caller is the domain owner
+            // Get current version from site record for expected_version check
+            const siteContent = siteRecord.data.content;
+            const currentVersion = siteContent?.fields?.current_version || '0';
+            core.debug(`Current version: ${currentVersion}`);
+            // Call smart contract function for site update
+            // Uses the existing update_site_data_with_quilt function from domain_registry
+            // The contract verifies caller ownership and expected version
             tx.moveCall({
-                target: `${this.packageId}::site_registry::update_site_direct`,
+                target: `${this.packageId}::domain_registry::update_site_data_with_quilt`,
                 arguments: [
+                    tx.object(this.registryId), // registry: &mut Registry
                     tx.object(siteRecordId), // site_record: &mut SiteRecord
-                    tx.pure.string(deploymentData.content_quilt_id), // content_quilt_id
-                    tx.pure.string(deploymentData.metadata_quilt_id), // metadata_quilt_id
-                    tx.pure.string(deploymentData.provenance_blob_id), // provenance_blob_id
-                    tx.pure.string(deploymentData.files_manifest_hash), // files_manifest_hash
-                    tx.pure.u64(deploymentData.total_files), // total_files
-                    tx.pure.u64(deploymentData.total_size_bytes), // total_size_bytes
-                    tx.pure.string(deploymentData.github_repo), // github_repo
+                    tx.pure.string(deploymentData.metadata_quilt_id), // quilt_blob_id (contains manifest + attestation)
                     tx.pure.string(deploymentData.github_commit_sha), // github_commit_sha
-                    tx.pure.string(deploymentData.github_workflow_ref), // github_workflow_ref
-                    tx.pure.u64(deploymentData.github_run_id), // github_run_id
+                    tx.pure.string('SLSA_LEVEL_3'), // slsa_level
+                    tx.pure.u64(BigInt(currentVersion)), // expected_version
                     tx.object('0x6'), // clock: &Clock
                 ],
             });
@@ -100581,7 +100580,7 @@ class CryptoGuardSuiClient {
             if (result.events) {
                 const updateEvent = result.events.find((e) => e.type.includes('SiteUpdated') ||
                     e.type.includes('SiteDataUpdated') ||
-                    e.type.includes('::site_registry::'));
+                    e.type.includes('::domain_registry::'));
                 if (updateEvent && updateEvent.parsedJson) {
                     const parsedJson = updateEvent.parsedJson;
                     newVersion = String(parsedJson.version || parsedJson.new_version || parsedJson.newVersion || '0');
