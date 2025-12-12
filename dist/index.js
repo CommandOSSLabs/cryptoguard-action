@@ -100142,44 +100142,64 @@ class CryptoGuardSuiClient {
     async lookupDomain(domain) {
         try {
             core.debug(`Looking up domain: ${domain}`);
-            // Query the registry for sites owned by any address with matching domain
-            const response = await this.client.getDynamicFields({
-                parentId: this.registryId,
+            // Step 1: Get the registry object to find domain_name_index table ID
+            const registryObject = await this.client.getObject({
+                id: this.registryId,
+                options: { showContent: true },
             });
-            core.debug(`Found ${response.data.length} dynamic fields in registry`);
-            // Search through dynamic fields to find matching domain
-            for (const field of response.data) {
-                try {
-                    const fieldObject = await this.client.getObject({
-                        id: field.objectId,
-                        options: {
-                            showContent: true,
-                            showOwner: true,
-                        },
-                    });
-                    if (fieldObject.data?.content?.dataType === 'moveObject') {
-                        const fields = fieldObject.data.content.fields;
-                        // Check if this is a SiteRecord with matching domain
-                        if (fields.domain === domain) {
-                            core.debug(`Found SiteRecord for domain ${domain}: ${field.objectId}`);
-                            return {
-                                id: field.objectId,
-                                domain: fields.domain,
-                                owner: fields.owner || 'unknown',
-                                currentVersion: BigInt(fields.current_version || 0),
-                            };
-                        }
-                    }
-                }
-                catch (error) {
-                    core.debug(`Error checking field ${field.objectId}: ${error instanceof Error ? error.message : String(error)}`);
-                    continue;
-                }
+            if (!registryObject.data?.content || registryObject.data.content.dataType !== 'moveObject') {
+                throw new SuiError('Registry object not found or invalid', 'REGISTRY_NOT_FOUND', { registryId: this.registryId });
             }
-            core.debug(`No SiteRecord found for domain: ${domain}`);
-            return null;
+            const registryFields = registryObject.data.content.fields;
+            const domainNameIndexId = registryFields.domain_name_index?.fields?.id?.id;
+            if (!domainNameIndexId) {
+                throw new SuiError('domain_name_index table not found in registry', 'REGISTRY_INVALID', { registryId: this.registryId });
+            }
+            core.debug(`Found domain_name_index table: ${domainNameIndexId}`);
+            // Step 2: Query the domain_name_index table for the domain
+            // The table uses String keys, so we need to use getDynamicFieldObject
+            const domainLookup = await this.client.getDynamicFieldObject({
+                parentId: domainNameIndexId,
+                name: {
+                    type: '0x1::string::String',
+                    value: domain,
+                },
+            });
+            if (!domainLookup.data?.content || domainLookup.data.content.dataType !== 'moveObject') {
+                core.debug(`No SiteRecord found for domain: ${domain}`);
+                return null;
+            }
+            // The value in the table is the SiteRecord object ID
+            const siteRecordId = domainLookup.data.content.fields?.value;
+            if (!siteRecordId) {
+                core.debug(`Domain found but SiteRecord ID is missing: ${domain}`);
+                return null;
+            }
+            core.debug(`Found SiteRecord ID for domain ${domain}: ${siteRecordId}`);
+            // Step 3: Get the actual SiteRecord object
+            const siteRecordObject = await this.client.getObject({
+                id: siteRecordId,
+                options: {
+                    showContent: true,
+                    showOwner: true,
+                },
+            });
+            if (!siteRecordObject.data?.content || siteRecordObject.data.content.dataType !== 'moveObject') {
+                core.debug(`SiteRecord object not found: ${siteRecordId}`);
+                return null;
+            }
+            const fields = siteRecordObject.data.content.fields;
+            return {
+                id: siteRecordId,
+                domain: fields.domain,
+                owner: fields.owner || 'unknown',
+                currentVersion: BigInt(fields.current_version || 0),
+            };
         }
         catch (error) {
+            if (error instanceof SuiError) {
+                throw error;
+            }
             throw new SuiError(`Failed to lookup domain: ${error instanceof Error ? error.message : String(error)}`, 'DOMAIN_LOOKUP_FAILED', { domain, error: error instanceof Error ? error.message : String(error) });
         }
     }
