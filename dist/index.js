@@ -98420,7 +98420,7 @@ function parseInputs() {
         buildDir: core.getInput('build-dir', { required: true }),
         network,
         privateKey: process.env.PRIVATE_KEY || process.env.ED25519_PRIVATE_KEY || '',
-        teeServerUrl: 'https://binary-transparency-dev.up.railway.app/api/v1',
+        teeServerUrl: core.getInput('tee-server-url') || 'https://binary-transparency-dev.up.railway.app/api/v1',
         suiRpcUrl: core.getInput('sui-rpc-url') ||
             (network === 'mainnet' ? 'https://fullnode.mainnet.sui.io:443' : 'https://fullnode.testnet.sui.io:443'),
         registryId: core.getInput('registry-id', { required: true }),
