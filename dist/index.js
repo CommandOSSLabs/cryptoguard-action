@@ -98578,26 +98578,23 @@ async function executeDeployment(inputs) {
     for (const file of quiltDeployment.contentQuilt.manifest.files) {
         blobMapping[file.path] = file.blobId;
     }
-    const provenanceBlob = quiltDeployment.metadataQuilt.manifest.files.find((f) => f.path === 'provenance.json');
-    const manifestBlob = quiltDeployment.metadataQuilt.manifest.files.find((f) => f.path === 'manifest.json');
-    if (!provenanceBlob) {
-        throw new walrus_client_1.WalrusError('Provenance blob not found in metadata quilt', 'QUILT_STRUCTURE_ERROR', { metadataQuilt: quiltDeployment.metadataQuilt });
-    }
-    if (!manifestBlob) {
-        throw new walrus_client_1.WalrusError('Manifest blob not found in metadata quilt', 'QUILT_STRUCTURE_ERROR', { metadataQuilt: quiltDeployment.metadataQuilt });
+    // Verify metadata quilt contains provenance and manifest entries
+    const provenanceFile = quiltDeployment.metadataQuilt.manifest.files.find((f) => f.path === 'provenance.json');
+    const manifestFile = quiltDeployment.metadataQuilt.manifest.files.find((f) => f.path === 'manifest.json');
+    if (!provenanceFile || !manifestFile) {
+        throw new walrus_client_1.WalrusError('Metadata quilt missing required files (provenance.json and manifest.json)', 'QUILT_STRUCTURE_ERROR', { metadataQuilt: quiltDeployment.metadataQuilt });
     }
     const totalSize = quiltDeployment.contentQuilt.totalSize + quiltDeployment.metadataQuilt.totalSize;
-    core.info(`✓ Uploaded ${quiltDeployment.contentQuilt.manifest.files.length} files (${(totalSize / 1024).toFixed(1)} KB)`);
-    core.info(`  Content: ${quiltDeployment.contentQuilt.blobId.substring(0, 12)}...`);
-    core.info(`  Metadata: ${quiltDeployment.metadataQuilt.blobId.substring(0, 12)}...`);
-    core.info(`  Manifest: ${manifestBlob.blobId.substring(0, 12)}... (${userManifest.framework})`);
+    core.info(`✓ Uploaded 2 quilts with ${quiltDeployment.contentQuilt.manifest.files.length} application files (${(totalSize / 1024).toFixed(1)} KB)`);
+    core.info(`  Content Quilt: ${quiltDeployment.contentQuilt.blobId.substring(0, 12)}...`);
+    core.info(`  Metadata Quilt: ${quiltDeployment.metadataQuilt.blobId.substring(0, 12)}... (provenance + manifest)`);
+    core.info(`  Framework: ${userManifest.framework} v${userManifest.frameworkVersion}`);
     debugLog('Walrus upload complete', {
-        content_quilt: quiltDeployment.contentQuilt.blobId,
-        metadata_quilt: quiltDeployment.metadataQuilt.blobId,
-        manifest_blob_id: manifestBlob.blobId,
+        content_quilt_blob_id: quiltDeployment.contentQuilt.blobId,
+        metadata_quilt_blob_id: quiltDeployment.metadataQuilt.blobId,
         framework: userManifest.framework,
         framework_version: userManifest.frameworkVersion,
-        total_files: quiltDeployment.contentQuilt.manifest.files.length,
+        total_application_files: quiltDeployment.contentQuilt.manifest.files.length,
         total_size_kb: (totalSize / 1024).toFixed(1),
         blob_mapping: blobMapping
     });
@@ -98618,10 +98615,11 @@ async function executeDeployment(inputs) {
         gasBudget: inputs.gasBudget
     });
     // Build deployment data for direct update
+    // Note: provenance_blob_id now points to metadata quilt (which contains embedded provenance + manifest)
     const deploymentData = {
         content_quilt_id: quiltDeployment.contentQuilt.blobId,
         metadata_quilt_id: quiltDeployment.metadataQuilt.blobId,
-        provenance_blob_id: provenanceBlob.blobId,
+        provenance_blob_id: quiltDeployment.metadataQuilt.blobId, // Provenance is now embedded in metadata quilt
         files_manifest_hash: manifestHash,
         total_files: filesManifest.total_files,
         total_size_bytes: filesManifest.total_size_bytes,
@@ -98634,7 +98632,6 @@ async function executeDeployment(inputs) {
         site_record_id: siteRecordId,
         content_quilt_id: deploymentData.content_quilt_id.substring(0, 16) + '...',
         metadata_quilt_id: deploymentData.metadata_quilt_id.substring(0, 16) + '...',
-        provenance_blob_id: deploymentData.provenance_blob_id.substring(0, 16) + '...',
         manifest_hash: deploymentData.files_manifest_hash.substring(0, 16) + '...',
         github_repo: deploymentData.github_repo,
     });
@@ -98658,7 +98655,7 @@ async function executeDeployment(inputs) {
         filesManifest,
         walrusUpload: {
             blob_mapping: blobMapping,
-            provenance_blob_id: provenanceBlob.blobId,
+            provenance_blob_id: quiltDeployment.metadataQuilt.blobId, // Points to metadata quilt (contains embedded provenance)
             total_blobs: Object.keys(blobMapping).length,
             total_size: totalSize,
             content_quilt_id: quiltDeployment.contentQuilt.blobId,
@@ -102147,34 +102144,21 @@ class WalrusClient {
         };
         const contentQuiltBlob = await this.uploadBlob(JSON.stringify(contentQuiltManifest, null, 2), 'content-quilt-manifest.json');
         core.debug(`Content quilt created: ${contentQuiltBlob.blobId}`);
-        // Upload provenance
-        const provenanceContent = JSON.stringify(provenance, null, 2);
-        const provenanceBlob = await this.uploadBlob(provenanceContent, 'provenance.json');
-        core.debug(`Provenance uploaded: ${provenanceBlob.blobId}`);
-        // Upload manifest
-        const manifestContent = JSON.stringify(manifest, null, 2);
-        const manifestBlob = await this.uploadBlob(manifestContent, 'manifest.json');
-        core.debug(`Manifest uploaded: ${manifestBlob.blobId}`);
-        // Create and upload metadata quilt with links
+        // Create metadata quilt with ONLY 2 files: provenance.json + manifest.json
+        // (provenance and manifest are embedded directly, NOT uploaded as separate blobs)
         const metadataQuiltManifest = {
             version: '1.0',
             files: [
                 {
                     path: 'provenance.json',
-                    blobId: provenanceBlob.blobId,
-                    size: provenanceBlob.size,
-                    contentType: 'application/json',
-                },
-                {
-                    path: 'content-quilt.json',
-                    blobId: contentQuiltBlob.blobId,
-                    size: contentQuiltBlob.size,
+                    blobId: '', // Embedded in quilt, not separate blob
+                    size: JSON.stringify(provenance).length,
                     contentType: 'application/json',
                 },
                 {
                     path: 'manifest.json',
-                    blobId: manifestBlob.blobId,
-                    size: manifestBlob.size,
+                    blobId: '', // Embedded in quilt, not separate blob
+                    size: JSON.stringify(manifest).length,
                     contentType: 'application/json',
                 },
             ],
@@ -102182,14 +102166,16 @@ class WalrusClient {
                 ...metadata,
                 created_at: new Date().toISOString(),
                 content_quilt_id: contentQuiltBlob.blobId,
-                manifest_blob_id: manifestBlob.blobId,
                 framework: manifest.framework,
                 framework_version: manifest.frameworkVersion,
                 deployment_type: 'two-quilt-structure',
+                // Embed the actual content
+                provenance,
+                manifest,
             },
         };
         const metadataQuiltBlob = await this.uploadBlob(JSON.stringify(metadataQuiltManifest, null, 2), 'metadata-quilt-manifest.json');
-        core.debug(`Metadata quilt created: ${metadataQuiltBlob.blobId} (links to content quilt)`);
+        core.debug(`Metadata quilt created: ${metadataQuiltBlob.blobId} (contains provenance + manifest)`);
         return {
             contentQuilt: {
                 blobId: contentQuiltBlob.blobId,
