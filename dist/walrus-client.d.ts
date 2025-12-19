@@ -87,10 +87,11 @@ export declare class WalrusClient {
      *
      * @param files - Map of file path to file content
      * @param provenance - Provenance data
+     * @param manifest - CryptoGuard manifest data (framework routing info)
      * @param metadata - Additional metadata
      * @returns Two-quilt deployment structure
      */
-    uploadTwoQuiltStructure(files: Record<string, Buffer>, provenance: any, metadata?: Record<string, any>): Promise<TwoQuiltDeployment>;
+    uploadTwoQuiltStructure(files: Record<string, Buffer>, provenance: any, manifest: any, metadata?: Record<string, any>): Promise<TwoQuiltDeployment>;
     /**
      * Get content type from file extension
      */
