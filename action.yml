@@ -10,7 +10,7 @@ inputs:
     description: 'Domain name for deployment verification'
     required: true
   build-dir:
-    description: 'Directory containing built application files'  
+    description: 'Directory containing built application files'
     required: true
     default: './dist'
   network:

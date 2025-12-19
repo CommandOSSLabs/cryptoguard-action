@@ -98284,6 +98284,11 @@ async function run() {
  */
 function parseInputs() {
     const network = core.getInput('network') || 'testnet';
+    // Hardcoded registry and package IDs based on network
+    const TESTNET_REGISTRY_ID = '0x7d7d100cce0cbbd01625b7f250c14cf25080fdcc412c651054ce44fe13f79bea';
+    const TESTNET_PACKAGE_ID = '0xddba6e2954145327888ca39d4875b858622023175869d63b06e2d2ff7cc49310';
+    const MAINNET_REGISTRY_ID = ''; // TODO: Add mainnet registry when deployed
+    const MAINNET_PACKAGE_ID = ''; // TODO: Add mainnet package when deployed
     const inputs = {
         domain: core.getInput('domain', { required: true }),
         buildDir: core.getInput('build-dir', { required: true }),
@@ -98292,8 +98297,8 @@ function parseInputs() {
         teeServerUrl: core.getInput('tee-server-url') || 'https://binary-transparency-dev.up.railway.app/api/v1',
         suiRpcUrl: core.getInput('sui-rpc-url') ||
             (network === 'mainnet' ? 'https://fullnode.mainnet.sui.io:443' : 'https://fullnode.testnet.sui.io:443'),
-        registryId: core.getInput('registry-id', { required: true }),
-        packageId: core.getInput('package-id') || '', // Empty means use network default
+        registryId: network === 'mainnet' ? MAINNET_REGISTRY_ID : TESTNET_REGISTRY_ID,
+        packageId: network === 'mainnet' ? MAINNET_PACKAGE_ID : TESTNET_PACKAGE_ID,
         walrusPublisherUrl: core.getInput('walrus-publisher-url') ||
             (network === 'mainnet' ? 'https://publisher.walrus.space' : 'https://publisher.walrus-testnet.walrus.space'),
         walrusAggregatorUrl: core.getInput('walrus-aggregator-url') ||
