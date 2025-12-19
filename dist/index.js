@@ -10968,7 +10968,7 @@ module.exports = getOptions
 /***/ 49384:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
-const semver = __nccwpck_require__(28160)
+const semver = __nccwpck_require__(41703)
 
 const satisfies = (range) => {
   return semver.satisfies(process.version, range, { includePrerelease: true })
@@ -66367,7 +66367,7 @@ module.exports = safer
 
 /***/ }),
 
-/***/ 23051:
+/***/ 87346:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -66508,17 +66508,17 @@ class Comparator {
 
 module.exports = Comparator
 
-const parseOptions = __nccwpck_require__(94028)
-const { safeRe: re, t } = __nccwpck_require__(79271)
-const cmp = __nccwpck_require__(90894)
-const debug = __nccwpck_require__(77807)
-const SemVer = __nccwpck_require__(9667)
-const Range = __nccwpck_require__(21574)
+const parseOptions = __nccwpck_require__(66525)
+const { safeRe: re, t } = __nccwpck_require__(17336)
+const cmp = __nccwpck_require__(77989)
+const debug = __nccwpck_require__(18162)
+const SemVer = __nccwpck_require__(32126)
+const Range = __nccwpck_require__(72773)
 
 
 /***/ }),
 
-/***/ 21574:
+/***/ 72773:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -66738,21 +66738,21 @@ class Range {
 
 module.exports = Range
 
-const LRU = __nccwpck_require__(53151)
+const LRU = __nccwpck_require__(83932)
 const cache = new LRU()
 
-const parseOptions = __nccwpck_require__(94028)
-const Comparator = __nccwpck_require__(23051)
-const debug = __nccwpck_require__(77807)
-const SemVer = __nccwpck_require__(9667)
+const parseOptions = __nccwpck_require__(66525)
+const Comparator = __nccwpck_require__(87346)
+const debug = __nccwpck_require__(18162)
+const SemVer = __nccwpck_require__(32126)
 const {
   safeRe: re,
   t,
   comparatorTrimReplace,
   tildeTrimReplace,
   caretTrimReplace,
-} = __nccwpck_require__(79271)
-const { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = __nccwpck_require__(81573)
+} = __nccwpck_require__(17336)
+const { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = __nccwpck_require__(5476)
 
 const isNullSet = c => c.value === '<0.0.0-0'
 const isAny = c => c.value === ''
@@ -66779,6 +66779,7 @@ const isSatisfiable = (comparators, options) => {
 // already replaced the hyphen ranges
 // turn into a set of JUST comparators.
 const parseComparator = (comp, options) => {
+  comp = comp.replace(re[t.BUILD], '')
   debug('comp', comp, options)
   comp = replaceCarets(comp, options)
   debug('caret', comp)
@@ -67082,18 +67083,18 @@ const testSet = (set, version, options) => {
 
 /***/ }),
 
-/***/ 9667:
+/***/ 32126:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const debug = __nccwpck_require__(77807)
-const { MAX_LENGTH, MAX_SAFE_INTEGER } = __nccwpck_require__(81573)
-const { safeRe: re, t } = __nccwpck_require__(79271)
+const debug = __nccwpck_require__(18162)
+const { MAX_LENGTH, MAX_SAFE_INTEGER } = __nccwpck_require__(5476)
+const { safeRe: re, t } = __nccwpck_require__(17336)
 
-const parseOptions = __nccwpck_require__(94028)
-const { compareIdentifiers } = __nccwpck_require__(46860)
+const parseOptions = __nccwpck_require__(66525)
+const { compareIdentifiers } = __nccwpck_require__(27437)
 class SemVer {
   constructor (version, options) {
     options = parseOptions(options)
@@ -67199,11 +67200,25 @@ class SemVer {
       other = new SemVer(other, this.options)
     }
 
-    return (
-      compareIdentifiers(this.major, other.major) ||
-      compareIdentifiers(this.minor, other.minor) ||
-      compareIdentifiers(this.patch, other.patch)
-    )
+    if (this.major < other.major) {
+      return -1
+    }
+    if (this.major > other.major) {
+      return 1
+    }
+    if (this.minor < other.minor) {
+      return -1
+    }
+    if (this.minor > other.minor) {
+      return 1
+    }
+    if (this.patch < other.patch) {
+      return -1
+    }
+    if (this.patch > other.patch) {
+      return 1
+    }
+    return 0
   }
 
   comparePre (other) {
@@ -67409,13 +67424,13 @@ module.exports = SemVer
 
 /***/ }),
 
-/***/ 53759:
+/***/ 44552:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const parse = __nccwpck_require__(63097)
+const parse = __nccwpck_require__(4738)
 const clean = (version, options) => {
   const s = parse(version.trim().replace(/^[=v]+/, ''), options)
   return s ? s.version : null
@@ -67425,18 +67440,18 @@ module.exports = clean
 
 /***/ }),
 
-/***/ 90894:
+/***/ 77989:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const eq = __nccwpck_require__(75666)
-const neq = __nccwpck_require__(70390)
-const gt = __nccwpck_require__(36639)
-const gte = __nccwpck_require__(7052)
-const lt = __nccwpck_require__(76952)
-const lte = __nccwpck_require__(36405)
+const eq = __nccwpck_require__(25375)
+const neq = __nccwpck_require__(22733)
+const gt = __nccwpck_require__(95590)
+const gte = __nccwpck_require__(96063)
+const lt = __nccwpck_require__(34361)
+const lte = __nccwpck_require__(84330)
 
 const cmp = (a, op, b, loose) => {
   switch (op) {
@@ -67487,15 +67502,15 @@ module.exports = cmp
 
 /***/ }),
 
-/***/ 6321:
+/***/ 30520:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
-const parse = __nccwpck_require__(63097)
-const { safeRe: re, t } = __nccwpck_require__(79271)
+const SemVer = __nccwpck_require__(32126)
+const parse = __nccwpck_require__(4738)
+const { safeRe: re, t } = __nccwpck_require__(17336)
 
 const coerce = (version, options) => {
   if (version instanceof SemVer) {
@@ -67557,13 +67572,13 @@ module.exports = coerce
 
 /***/ }),
 
-/***/ 51384:
+/***/ 15135:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
+const SemVer = __nccwpck_require__(32126)
 const compareBuild = (a, b, loose) => {
   const versionA = new SemVer(a, loose)
   const versionB = new SemVer(b, loose)
@@ -67574,26 +67589,26 @@ module.exports = compareBuild
 
 /***/ }),
 
-/***/ 44098:
+/***/ 30469:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compare = __nccwpck_require__(94301)
+const compare = __nccwpck_require__(35950)
 const compareLoose = (a, b) => compare(a, b, true)
 module.exports = compareLoose
 
 
 /***/ }),
 
-/***/ 94301:
+/***/ 35950:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
+const SemVer = __nccwpck_require__(32126)
 const compare = (a, b, loose) =>
   new SemVer(a, loose).compare(new SemVer(b, loose))
 
@@ -67602,13 +67617,13 @@ module.exports = compare
 
 /***/ }),
 
-/***/ 28527:
+/***/ 75790:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const parse = __nccwpck_require__(63097)
+const parse = __nccwpck_require__(4738)
 
 const diff = (version1, version2) => {
   const v1 = parse(version1, null, true)
@@ -67670,52 +67685,52 @@ module.exports = diff
 
 /***/ }),
 
-/***/ 75666:
+/***/ 25375:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compare = __nccwpck_require__(94301)
+const compare = __nccwpck_require__(35950)
 const eq = (a, b, loose) => compare(a, b, loose) === 0
 module.exports = eq
 
 
 /***/ }),
 
-/***/ 36639:
+/***/ 95590:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compare = __nccwpck_require__(94301)
+const compare = __nccwpck_require__(35950)
 const gt = (a, b, loose) => compare(a, b, loose) > 0
 module.exports = gt
 
 
 /***/ }),
 
-/***/ 7052:
+/***/ 96063:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compare = __nccwpck_require__(94301)
+const compare = __nccwpck_require__(35950)
 const gte = (a, b, loose) => compare(a, b, loose) >= 0
 module.exports = gte
 
 
 /***/ }),
 
-/***/ 16570:
+/***/ 94825:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
+const SemVer = __nccwpck_require__(32126)
 
 const inc = (version, release, options, identifier, identifierBase) => {
   if (typeof (options) === 'string') {
@@ -67738,78 +67753,78 @@ module.exports = inc
 
 /***/ }),
 
-/***/ 76952:
+/***/ 34361:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compare = __nccwpck_require__(94301)
+const compare = __nccwpck_require__(35950)
 const lt = (a, b, loose) => compare(a, b, loose) < 0
 module.exports = lt
 
 
 /***/ }),
 
-/***/ 36405:
+/***/ 84330:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compare = __nccwpck_require__(94301)
+const compare = __nccwpck_require__(35950)
 const lte = (a, b, loose) => compare(a, b, loose) <= 0
 module.exports = lte
 
 
 /***/ }),
 
-/***/ 37287:
+/***/ 43136:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
+const SemVer = __nccwpck_require__(32126)
 const major = (a, loose) => new SemVer(a, loose).major
 module.exports = major
 
 
 /***/ }),
 
-/***/ 43475:
+/***/ 5500:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
+const SemVer = __nccwpck_require__(32126)
 const minor = (a, loose) => new SemVer(a, loose).minor
 module.exports = minor
 
 
 /***/ }),
 
-/***/ 70390:
+/***/ 22733:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compare = __nccwpck_require__(94301)
+const compare = __nccwpck_require__(35950)
 const neq = (a, b, loose) => compare(a, b, loose) !== 0
 module.exports = neq
 
 
 /***/ }),
 
-/***/ 63097:
+/***/ 4738:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
+const SemVer = __nccwpck_require__(32126)
 const parse = (version, options, throwErrors = false) => {
   if (version instanceof SemVer) {
     return version
@@ -67829,26 +67844,26 @@ module.exports = parse
 
 /***/ }),
 
-/***/ 13756:
+/***/ 83443:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
+const SemVer = __nccwpck_require__(32126)
 const patch = (a, loose) => new SemVer(a, loose).patch
 module.exports = patch
 
 
 /***/ }),
 
-/***/ 62874:
+/***/ 78787:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const parse = __nccwpck_require__(63097)
+const parse = __nccwpck_require__(4738)
 const prerelease = (version, options) => {
   const parsed = parse(version, options)
   return (parsed && parsed.prerelease.length) ? parsed.prerelease : null
@@ -67858,39 +67873,39 @@ module.exports = prerelease
 
 /***/ }),
 
-/***/ 15733:
+/***/ 20120:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compare = __nccwpck_require__(94301)
+const compare = __nccwpck_require__(35950)
 const rcompare = (a, b, loose) => compare(b, a, loose)
 module.exports = rcompare
 
 
 /***/ }),
 
-/***/ 52608:
+/***/ 41711:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compareBuild = __nccwpck_require__(51384)
+const compareBuild = __nccwpck_require__(15135)
 const rsort = (list, loose) => list.sort((a, b) => compareBuild(b, a, loose))
 module.exports = rsort
 
 
 /***/ }),
 
-/***/ 99523:
+/***/ 26056:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const Range = __nccwpck_require__(21574)
+const Range = __nccwpck_require__(72773)
 const satisfies = (version, range, options) => {
   try {
     range = new Range(range, options)
@@ -67904,26 +67919,26 @@ module.exports = satisfies
 
 /***/ }),
 
-/***/ 16168:
+/***/ 27041:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const compareBuild = __nccwpck_require__(51384)
+const compareBuild = __nccwpck_require__(15135)
 const sort = (list, loose) => list.sort((a, b) => compareBuild(a, b, loose))
 module.exports = sort
 
 
 /***/ }),
 
-/***/ 6548:
+/***/ 7879:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const parse = __nccwpck_require__(63097)
+const parse = __nccwpck_require__(4738)
 const valid = (version, options) => {
   const v = parse(version, options)
   return v ? v.version : null
@@ -67933,54 +67948,54 @@ module.exports = valid
 
 /***/ }),
 
-/***/ 28160:
+/***/ 41703:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
 // just pre-load all the stuff that index.js lazily exports
-const internalRe = __nccwpck_require__(79271)
-const constants = __nccwpck_require__(81573)
-const SemVer = __nccwpck_require__(9667)
-const identifiers = __nccwpck_require__(46860)
-const parse = __nccwpck_require__(63097)
-const valid = __nccwpck_require__(6548)
-const clean = __nccwpck_require__(53759)
-const inc = __nccwpck_require__(16570)
-const diff = __nccwpck_require__(28527)
-const major = __nccwpck_require__(37287)
-const minor = __nccwpck_require__(43475)
-const patch = __nccwpck_require__(13756)
-const prerelease = __nccwpck_require__(62874)
-const compare = __nccwpck_require__(94301)
-const rcompare = __nccwpck_require__(15733)
-const compareLoose = __nccwpck_require__(44098)
-const compareBuild = __nccwpck_require__(51384)
-const sort = __nccwpck_require__(16168)
-const rsort = __nccwpck_require__(52608)
-const gt = __nccwpck_require__(36639)
-const lt = __nccwpck_require__(76952)
-const eq = __nccwpck_require__(75666)
-const neq = __nccwpck_require__(70390)
-const gte = __nccwpck_require__(7052)
-const lte = __nccwpck_require__(36405)
-const cmp = __nccwpck_require__(90894)
-const coerce = __nccwpck_require__(6321)
-const Comparator = __nccwpck_require__(23051)
-const Range = __nccwpck_require__(21574)
-const satisfies = __nccwpck_require__(99523)
-const toComparators = __nccwpck_require__(58262)
-const maxSatisfying = __nccwpck_require__(5665)
-const minSatisfying = __nccwpck_require__(54523)
-const minVersion = __nccwpck_require__(51458)
-const validRange = __nccwpck_require__(88441)
-const outside = __nccwpck_require__(94016)
-const gtr = __nccwpck_require__(74348)
-const ltr = __nccwpck_require__(91637)
-const intersects = __nccwpck_require__(83633)
-const simplifyRange = __nccwpck_require__(49668)
-const subset = __nccwpck_require__(94585)
+const internalRe = __nccwpck_require__(17336)
+const constants = __nccwpck_require__(5476)
+const SemVer = __nccwpck_require__(32126)
+const identifiers = __nccwpck_require__(27437)
+const parse = __nccwpck_require__(4738)
+const valid = __nccwpck_require__(7879)
+const clean = __nccwpck_require__(44552)
+const inc = __nccwpck_require__(94825)
+const diff = __nccwpck_require__(75790)
+const major = __nccwpck_require__(43136)
+const minor = __nccwpck_require__(5500)
+const patch = __nccwpck_require__(83443)
+const prerelease = __nccwpck_require__(78787)
+const compare = __nccwpck_require__(35950)
+const rcompare = __nccwpck_require__(20120)
+const compareLoose = __nccwpck_require__(30469)
+const compareBuild = __nccwpck_require__(15135)
+const sort = __nccwpck_require__(27041)
+const rsort = __nccwpck_require__(41711)
+const gt = __nccwpck_require__(95590)
+const lt = __nccwpck_require__(34361)
+const eq = __nccwpck_require__(25375)
+const neq = __nccwpck_require__(22733)
+const gte = __nccwpck_require__(96063)
+const lte = __nccwpck_require__(84330)
+const cmp = __nccwpck_require__(77989)
+const coerce = __nccwpck_require__(30520)
+const Comparator = __nccwpck_require__(87346)
+const Range = __nccwpck_require__(72773)
+const satisfies = __nccwpck_require__(26056)
+const toComparators = __nccwpck_require__(94597)
+const maxSatisfying = __nccwpck_require__(20394)
+const minSatisfying = __nccwpck_require__(12400)
+const minVersion = __nccwpck_require__(47675)
+const validRange = __nccwpck_require__(58236)
+const outside = __nccwpck_require__(20089)
+const gtr = __nccwpck_require__(44305)
+const ltr = __nccwpck_require__(51624)
+const intersects = __nccwpck_require__(30082)
+const simplifyRange = __nccwpck_require__(15079)
+const subset = __nccwpck_require__(27558)
 module.exports = {
   parse,
   valid,
@@ -68032,7 +68047,7 @@ module.exports = {
 
 /***/ }),
 
-/***/ 81573:
+/***/ 5476:
 /***/ ((module) => {
 
 "use strict";
@@ -68077,7 +68092,7 @@ module.exports = {
 
 /***/ }),
 
-/***/ 77807:
+/***/ 18162:
 /***/ ((module) => {
 
 "use strict";
@@ -68096,7 +68111,7 @@ module.exports = debug
 
 /***/ }),
 
-/***/ 46860:
+/***/ 27437:
 /***/ ((module) => {
 
 "use strict";
@@ -68104,6 +68119,10 @@ module.exports = debug
 
 const numeric = /^[0-9]+$/
 const compareIdentifiers = (a, b) => {
+  if (typeof a === 'number' && typeof b === 'number') {
+    return a === b ? 0 : a < b ? -1 : 1
+  }
+
   const anum = numeric.test(a)
   const bnum = numeric.test(b)
 
@@ -68129,7 +68148,7 @@ module.exports = {
 
 /***/ }),
 
-/***/ 53151:
+/***/ 83932:
 /***/ ((module) => {
 
 "use strict";
@@ -68179,7 +68198,7 @@ module.exports = LRUCache
 
 /***/ }),
 
-/***/ 94028:
+/***/ 66525:
 /***/ ((module) => {
 
 "use strict";
@@ -68204,7 +68223,7 @@ module.exports = parseOptions
 
 /***/ }),
 
-/***/ 79271:
+/***/ 17336:
 /***/ ((module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -68214,8 +68233,8 @@ const {
   MAX_SAFE_COMPONENT_LENGTH,
   MAX_SAFE_BUILD_LENGTH,
   MAX_LENGTH,
-} = __nccwpck_require__(81573)
-const debug = __nccwpck_require__(77807)
+} = __nccwpck_require__(5476)
+const debug = __nccwpck_require__(18162)
 exports = module.exports = {}
 
 // The actual regexps go on exports.re
@@ -68435,27 +68454,27 @@ createToken('GTE0PRE', '^\\s*>=\\s*0\\.0\\.0-0\\s*$')
 
 /***/ }),
 
-/***/ 74348:
+/***/ 44305:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
 // Determine if version is greater than all the versions possible in the range.
-const outside = __nccwpck_require__(94016)
+const outside = __nccwpck_require__(20089)
 const gtr = (version, range, options) => outside(version, range, '>', options)
 module.exports = gtr
 
 
 /***/ }),
 
-/***/ 83633:
+/***/ 30082:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const Range = __nccwpck_require__(21574)
+const Range = __nccwpck_require__(72773)
 const intersects = (r1, r2, options) => {
   r1 = new Range(r1, options)
   r2 = new Range(r2, options)
@@ -68466,13 +68485,13 @@ module.exports = intersects
 
 /***/ }),
 
-/***/ 91637:
+/***/ 51624:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const outside = __nccwpck_require__(94016)
+const outside = __nccwpck_require__(20089)
 // Determine if version is less than all the versions possible in the range
 const ltr = (version, range, options) => outside(version, range, '<', options)
 module.exports = ltr
@@ -68480,14 +68499,14 @@ module.exports = ltr
 
 /***/ }),
 
-/***/ 5665:
+/***/ 20394:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
-const Range = __nccwpck_require__(21574)
+const SemVer = __nccwpck_require__(32126)
+const Range = __nccwpck_require__(72773)
 
 const maxSatisfying = (versions, range, options) => {
   let max = null
@@ -68515,14 +68534,14 @@ module.exports = maxSatisfying
 
 /***/ }),
 
-/***/ 54523:
+/***/ 12400:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
-const Range = __nccwpck_require__(21574)
+const SemVer = __nccwpck_require__(32126)
+const Range = __nccwpck_require__(72773)
 const minSatisfying = (versions, range, options) => {
   let min = null
   let minSV = null
@@ -68549,15 +68568,15 @@ module.exports = minSatisfying
 
 /***/ }),
 
-/***/ 51458:
+/***/ 47675:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
-const Range = __nccwpck_require__(21574)
-const gt = __nccwpck_require__(36639)
+const SemVer = __nccwpck_require__(32126)
+const Range = __nccwpck_require__(72773)
+const gt = __nccwpck_require__(95590)
 
 const minVersion = (range, loose) => {
   range = new Range(range, loose)
@@ -68620,21 +68639,21 @@ module.exports = minVersion
 
 /***/ }),
 
-/***/ 94016:
+/***/ 20089:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const SemVer = __nccwpck_require__(9667)
-const Comparator = __nccwpck_require__(23051)
+const SemVer = __nccwpck_require__(32126)
+const Comparator = __nccwpck_require__(87346)
 const { ANY } = Comparator
-const Range = __nccwpck_require__(21574)
-const satisfies = __nccwpck_require__(99523)
-const gt = __nccwpck_require__(36639)
-const lt = __nccwpck_require__(76952)
-const lte = __nccwpck_require__(36405)
-const gte = __nccwpck_require__(7052)
+const Range = __nccwpck_require__(72773)
+const satisfies = __nccwpck_require__(26056)
+const gt = __nccwpck_require__(95590)
+const lt = __nccwpck_require__(34361)
+const lte = __nccwpck_require__(84330)
+const gte = __nccwpck_require__(96063)
 
 const outside = (version, range, hilo, options) => {
   version = new SemVer(version, options)
@@ -68710,7 +68729,7 @@ module.exports = outside
 
 /***/ }),
 
-/***/ 49668:
+/***/ 15079:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -68719,8 +68738,8 @@ module.exports = outside
 // given a set of versions and a range, create a "simplified" range
 // that includes the same versions that the original range does
 // If the original range is shorter than the simplified one, return that.
-const satisfies = __nccwpck_require__(99523)
-const compare = __nccwpck_require__(94301)
+const satisfies = __nccwpck_require__(26056)
+const compare = __nccwpck_require__(35950)
 module.exports = (versions, range, options) => {
   const set = []
   let first = null
@@ -68767,17 +68786,17 @@ module.exports = (versions, range, options) => {
 
 /***/ }),
 
-/***/ 94585:
+/***/ 27558:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const Range = __nccwpck_require__(21574)
-const Comparator = __nccwpck_require__(23051)
+const Range = __nccwpck_require__(72773)
+const Comparator = __nccwpck_require__(87346)
 const { ANY } = Comparator
-const satisfies = __nccwpck_require__(99523)
-const compare = __nccwpck_require__(94301)
+const satisfies = __nccwpck_require__(26056)
+const compare = __nccwpck_require__(35950)
 
 // Complex range `r1 || r2 || ...` is a subset of `R1 || R2 || ...` iff:
 // - Every simple range `r1, r2, ...` is a null set, OR
@@ -69024,13 +69043,13 @@ module.exports = subset
 
 /***/ }),
 
-/***/ 58262:
+/***/ 94597:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const Range = __nccwpck_require__(21574)
+const Range = __nccwpck_require__(72773)
 
 // Mostly just for testing and legacy API reasons
 const toComparators = (range, options) =>
@@ -69042,13 +69061,13 @@ module.exports = toComparators
 
 /***/ }),
 
-/***/ 88441:
+/***/ 58236:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const Range = __nccwpck_require__(21574)
+const Range = __nccwpck_require__(72773)
 const validRange = (range, options) => {
   try {
     // Return '*' instead of '' so that truthiness works.
@@ -98457,6 +98476,72 @@ async function executeDeployment(inputs) {
         builderId: slsaProvenance.predicate?.runDetails?.builder?.id,
         cosignSignature: attestedProvenance.cosign_signature
     });
+    // Step 4.5: Detect and Validate Manifest
+    core.info('Step 4.5: Detect and Validate Manifest');
+    let userManifest = null;
+    const manifestPath = path.join(inputs.buildDir, 'manifest.json');
+    try {
+        await fs.access(manifestPath);
+        // Manifest exists, validate it
+        core.info('  Found manifest.json, validating...');
+        const manifestContent = await fs.readFile(manifestPath, 'utf-8');
+        try {
+            userManifest = JSON.parse(manifestContent);
+            // Validate using @cmdoss/cryptoguard-manifest-core
+            const { validateManifest } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(41312)));
+            validateManifest(userManifest);
+            core.info(`✓ Manifest validated: ${userManifest.framework} v${userManifest.frameworkVersion}`);
+            core.info(`  Sources: ${userManifest.sources.length} directory mappings`);
+            debugLog('User manifest validated', {
+                framework: userManifest.framework,
+                frameworkVersion: userManifest.frameworkVersion,
+                sources: userManifest.sources,
+            });
+        }
+        catch (error) {
+            throw new Error(`❌ Invalid manifest.json format!\n\n` +
+                `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
+                `The manifest.json file in your build directory is invalid.\n\n` +
+                `Action Required:\n` +
+                `1. Check manifest.json format:\n` +
+                `   {\n` +
+                `     "version": "1.0",\n` +
+                `     "framework": "nextjs",\n` +
+                `     "frameworkVersion": "14.2.3",\n` +
+                `     "sources": [\n` +
+                `       { "dir": "client", "serveAt": "/" }\n` +
+                `     ]\n` +
+                `   }\n\n` +
+                `2. If using framework plugin:\n` +
+                `   - Next.js: withCryptoGuard() wrapper\n` +
+                `   - Nuxt: @cmdoss/cryptoguard-manifest-nuxt module\n` +
+                `   - SvelteKit: cryptoGuard() plugin\n` +
+                `   - Astro: cryptoGuard integration\n\n` +
+                `3. Rebuild your application\n\n` +
+                `4. Re-run this workflow`);
+        }
+    }
+    catch {
+        // Manifest doesn't exist, create blank valid one
+        core.info('  No manifest.json found, creating blank manifest...');
+        const { MANIFEST_VERSION } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(41312)));
+        // Create minimal valid manifest
+        userManifest = {
+            version: MANIFEST_VERSION,
+            framework: 'unknown',
+            frameworkVersion: 'unknown',
+            sources: [
+                {
+                    dir: '.',
+                    serveAt: '/',
+                },
+            ],
+        };
+        core.info(`✓ Created blank manifest (framework: unknown)`);
+        core.info(`  Note: Install framework plugin for automatic manifest generation`);
+        debugLog('Blank manifest created', userManifest);
+    }
+    core.info('');
     // Step 5: Upload to Walrus (USER CONTROLLED - Uses user's credentials)
     core.info('Step 5: Upload to Walrus (User Controlled)');
     const walrusClient = new walrus_client_1.WalrusClient({
@@ -98483,7 +98568,7 @@ async function executeDeployment(inputs) {
         github_context: githubContext,
         upload_timestamp: new Date().toISOString(),
     };
-    const quiltDeployment = await walrusClient.uploadTwoQuiltStructure(filesToUpload, provenanceData, {
+    const quiltDeployment = await walrusClient.uploadTwoQuiltStructure(filesToUpload, provenanceData, userManifest, {
         domain: inputs.domain,
         network: inputs.network,
         deployment_type: 'cryptoguard-trustless',
@@ -98494,16 +98579,24 @@ async function executeDeployment(inputs) {
         blobMapping[file.path] = file.blobId;
     }
     const provenanceBlob = quiltDeployment.metadataQuilt.manifest.files.find((f) => f.path === 'provenance.json');
+    const manifestBlob = quiltDeployment.metadataQuilt.manifest.files.find((f) => f.path === 'manifest.json');
     if (!provenanceBlob) {
         throw new walrus_client_1.WalrusError('Provenance blob not found in metadata quilt', 'QUILT_STRUCTURE_ERROR', { metadataQuilt: quiltDeployment.metadataQuilt });
+    }
+    if (!manifestBlob) {
+        throw new walrus_client_1.WalrusError('Manifest blob not found in metadata quilt', 'QUILT_STRUCTURE_ERROR', { metadataQuilt: quiltDeployment.metadataQuilt });
     }
     const totalSize = quiltDeployment.contentQuilt.totalSize + quiltDeployment.metadataQuilt.totalSize;
     core.info(`✓ Uploaded ${quiltDeployment.contentQuilt.manifest.files.length} files (${(totalSize / 1024).toFixed(1)} KB)`);
     core.info(`  Content: ${quiltDeployment.contentQuilt.blobId.substring(0, 12)}...`);
     core.info(`  Metadata: ${quiltDeployment.metadataQuilt.blobId.substring(0, 12)}...`);
+    core.info(`  Manifest: ${manifestBlob.blobId.substring(0, 12)}... (${userManifest.framework})`);
     debugLog('Walrus upload complete', {
         content_quilt: quiltDeployment.contentQuilt.blobId,
         metadata_quilt: quiltDeployment.metadataQuilt.blobId,
+        manifest_blob_id: manifestBlob.blobId,
+        framework: userManifest.framework,
+        framework_version: userManifest.frameworkVersion,
         total_files: quiltDeployment.contentQuilt.manifest.files.length,
         total_size_kb: (totalSize / 1024).toFixed(1),
         blob_mapping: blobMapping
@@ -102024,10 +102117,11 @@ class WalrusClient {
      *
      * @param files - Map of file path to file content
      * @param provenance - Provenance data
+     * @param manifest - CryptoGuard manifest data (framework routing info)
      * @param metadata - Additional metadata
      * @returns Two-quilt deployment structure
      */
-    async uploadTwoQuiltStructure(files, provenance, metadata) {
+    async uploadTwoQuiltStructure(files, provenance, manifest, metadata) {
         // Upload individual file blobs
         const fileBlobInfos = [];
         for (const [filePath, fileContent] of Object.entries(files)) {
@@ -102057,6 +102151,10 @@ class WalrusClient {
         const provenanceContent = JSON.stringify(provenance, null, 2);
         const provenanceBlob = await this.uploadBlob(provenanceContent, 'provenance.json');
         core.debug(`Provenance uploaded: ${provenanceBlob.blobId}`);
+        // Upload manifest
+        const manifestContent = JSON.stringify(manifest, null, 2);
+        const manifestBlob = await this.uploadBlob(manifestContent, 'manifest.json');
+        core.debug(`Manifest uploaded: ${manifestBlob.blobId}`);
         // Create and upload metadata quilt with links
         const metadataQuiltManifest = {
             version: '1.0',
@@ -102073,11 +102171,20 @@ class WalrusClient {
                     size: contentQuiltBlob.size,
                     contentType: 'application/json',
                 },
+                {
+                    path: 'manifest.json',
+                    blobId: manifestBlob.blobId,
+                    size: manifestBlob.size,
+                    contentType: 'application/json',
+                },
             ],
             metadata: {
                 ...metadata,
                 created_at: new Date().toISOString(),
                 content_quilt_id: contentQuiltBlob.blobId,
+                manifest_blob_id: manifestBlob.blobId,
+                framework: manifest.framework,
+                framework_version: manifest.frameworkVersion,
                 deployment_type: 'two-quilt-structure',
             },
         };
@@ -139348,19 +139455,35 @@ function isValidSignature(signature) {
 
 class CryptoService {
     static async getEd25519() {
-        const module = await __nccwpck_require__.e(/* import() */ 858).then(__nccwpck_require__.bind(__nccwpck_require__, 7858));
-        // Handle both ESM default export and named exports
-        const ed25519 = module.default || module;
-        // Always ensure sha512Sync is configured (may be reset between Jest tests)
-        if (ed25519.etc && !ed25519.etc.sha512Sync) {
-            const { sha512 } = await Promise.all(/* import() */[__nccwpck_require__.e(860), __nccwpck_require__.e(878)]).then(__nccwpck_require__.bind(__nccwpck_require__, 57878));
-            const { concatBytes } = await __nccwpck_require__.e(/* import() */ 7).then(__nccwpck_require__.bind(__nccwpck_require__, 28007));
-            ed25519.etc.sha512Sync = (...messages) => {
-                return sha512(concatBytes(...messages));
-            };
+        if (this.ed25519Cache) {
+            return this.ed25519Cache;
         }
-        this.ed25519Cache = ed25519;
-        return ed25519;
+        // Import ed25519 first
+        const ed25519Module = await __nccwpck_require__.e(/* import() */ 858).then(__nccwpck_require__.bind(__nccwpck_require__, 7858));
+        // IMMEDIATELY set up SHA512 after import
+        const { sha512 } = await Promise.all(/* import() */[__nccwpck_require__.e(860), __nccwpck_require__.e(878)]).then(__nccwpck_require__.bind(__nccwpck_require__, 57878));
+        const { concatBytes } = await __nccwpck_require__.e(/* import() */ 7).then(__nccwpck_require__.bind(__nccwpck_require__, 28007));
+        // Set up the global SHA512 function that @noble/ed25519 v2.x requires
+        const ed25519 = ed25519Module;
+        // Create the SHA512 function
+        const sha512Func = (...messages) => {
+            return sha512(concatBytes(...messages));
+        };
+        console.log('DEBUG: ed25519.etc exists:', !!ed25519.etc);
+        console.log('DEBUG: ed25519.etc.sha512Sync before:', ed25519.etc?.sha512Sync);
+        // Set SHA512 on the etc object (this is where the library actually looks)
+        try {
+            ed25519.etc.sha512Sync = sha512Func;
+            console.log('DEBUG: Successfully set ed25519.etc.sha512Sync');
+        }
+        catch (error) {
+            console.log('DEBUG: Failed to set ed25519.etc.sha512Sync:', error);
+        }
+        // Final check
+        console.log('DEBUG: Final check - etc.sha512Sync exists:', !!ed25519.etc?.sha512Sync);
+        console.log('DEBUG: Final check - etc.sha512Sync type:', typeof ed25519.etc?.sha512Sync);
+        this.ed25519Cache = ed25519Module;
+        return ed25519Module;
     }
     /**
      * Lazy load noble/hashes to handle ES module imports
@@ -139399,8 +139522,7 @@ class CryptoService {
         const normalizedKey = normalizePrivateKey(privateKey);
         const messageBytes = new TextEncoder().encode(message);
         const privateKeyBytes = Buffer.from(normalizedKey.replace('0x', ''), 'hex');
-        // Use sync sign (sha512Sync is set up in getEd25519)
-        const signature = ed25519.sign(messageBytes, privateKeyBytes);
+        const signature = await ed25519.sign(messageBytes, privateKeyBytes);
         return '0x' + Buffer.from(signature).toString('hex');
     }
     /**
@@ -139420,8 +139542,7 @@ class CryptoService {
             const messageBytes = new TextEncoder().encode(message);
             const signatureBytes = Buffer.from(signature.replace('0x', ''), 'hex');
             const publicKeyBytes = Buffer.from(publicKey.replace('0x', ''), 'hex');
-            // Use sync verify (sha512Sync is set up in getEd25519)
-            return ed25519.verify(signatureBytes, messageBytes, publicKeyBytes);
+            return await ed25519.verify(signatureBytes, messageBytes, publicKeyBytes);
         }
         catch {
             return false;
@@ -139479,12 +139600,228 @@ class CryptoService {
 }
 /**
  * Lazy load noble/ed25519 to handle ES module imports
- * Sets up sha512Sync for sync operations (sign, verify)
  */
 CryptoService.ed25519Cache = null;
 //# sourceMappingURL=crypto-service.js.map
 ;// CONCATENATED MODULE: ../crypto/dist/index.js
 
+
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 41312:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+"use strict";
+// ESM COMPAT FLAG
+__nccwpck_require__.r(__webpack_exports__);
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  MANIFEST_VERSION: () => (/* reexport */ MANIFEST_VERSION),
+  deepEqual: () => (/* reexport */ deepEqual),
+  normalizePath: () => (/* reexport */ normalizePath),
+  readExistingManifest: () => (/* reexport */ readExistingManifest),
+  validateManifest: () => (/* reexport */ validateManifest),
+  writeManifest: () => (/* reexport */ writeManifest),
+  writeManifestIfChanged: () => (/* reexport */ writeManifestIfChanged)
+});
+
+;// CONCATENATED MODULE: ../manifest-generator/core/dist/types.js
+/**
+ * Core types for CryptoGuard manifest generation
+ */
+/**
+ * Manifest version constant
+ */
+const MANIFEST_VERSION = '1.0';
+//# sourceMappingURL=types.js.map
+;// CONCATENATED MODULE: ../manifest-generator/core/dist/validator.js
+/**
+ * Manifest validation logic
+ */
+/**
+ * Validate generated manifest structure and security
+ *
+ * @param manifest - The manifest to validate
+ * @throws {Error} if manifest is invalid
+ *
+ * @example
+ * ```typescript
+ * const manifest = generateManifest(config);
+ * validateManifest(manifest); // Throws if invalid
+ * ```
+ */
+function validateManifest(manifest) {
+    // Check required fields
+    if (!manifest.version) {
+        throw new Error('Manifest missing required field: version');
+    }
+    if (!manifest.framework) {
+        throw new Error('Manifest missing required field: framework');
+    }
+    if (!manifest.frameworkVersion) {
+        throw new Error('Manifest missing required field: frameworkVersion');
+    }
+    if (!manifest.sources || manifest.sources.length === 0) {
+        throw new Error('Manifest missing required field: sources');
+    }
+    // Validate each source
+    for (const source of manifest.sources) {
+        if (!source.dir) {
+            throw new Error('Source missing required field: dir');
+        }
+        if (!source.serveAt) {
+            throw new Error('Source missing required field: serveAt');
+        }
+        // Security: Check for path traversal
+        if (source.dir.includes('..')) {
+            throw new Error(`Invalid source.dir (path traversal detected): ${source.dir}`);
+        }
+        // Security: Ensure relative paths only
+        if (source.dir.startsWith('/')) {
+            throw new Error(`Invalid source.dir (absolute path): ${source.dir}`);
+        }
+        // Validation: serveAt must start with /
+        if (!source.serveAt.startsWith('/')) {
+            throw new Error(`Invalid source.serveAt (must start with /): ${source.serveAt}`);
+        }
+    }
+    // Check for nested directories
+    for (let i = 0; i < manifest.sources.length; i++) {
+        for (let j = i + 1; j < manifest.sources.length; j++) {
+            const dir1 = manifest.sources[i].dir;
+            const dir2 = manifest.sources[j].dir;
+            if (dir1.startsWith(dir2 + '/') || dir2.startsWith(dir1 + '/')) {
+                throw new Error(`Invalid manifest: nested source directories detected: ${dir1} and ${dir2}`);
+            }
+        }
+    }
+}
+//# sourceMappingURL=validator.js.map
+// EXTERNAL MODULE: external "fs"
+var external_fs_ = __nccwpck_require__(79896);
+// EXTERNAL MODULE: external "path"
+var external_path_ = __nccwpck_require__(16928);
+;// CONCATENATED MODULE: ../manifest-generator/core/dist/utils.js
+/**
+ * Shared utility functions for manifest generation
+ */
+
+
+/**
+ * Deep equality check for objects
+ *
+ * @param obj1 - First object to compare
+ * @param obj2 - Second object to compare
+ * @returns true if objects are deeply equal
+ */
+function deepEqual(obj1, obj2) {
+    if (obj1 === obj2)
+        return true;
+    if (typeof obj1 !== 'object' ||
+        typeof obj2 !== 'object' ||
+        obj1 === null ||
+        obj2 === null) {
+        return false;
+    }
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
+    if (keys1.length !== keys2.length)
+        return false;
+    for (const key of keys1) {
+        if (!keys2.includes(key))
+            return false;
+        if (!deepEqual(obj1[key], obj2[key]))
+            return false;
+    }
+    return true;
+}
+/**
+ * Normalize path separators to forward slashes
+ *
+ * @param path - Path to normalize
+ * @returns Normalized path with forward slashes
+ */
+function normalizePath(path) {
+    return path.replace(/\\/g, '/');
+}
+/**
+ * Read existing manifest if it exists
+ *
+ * @param projectRoot - Project root directory
+ * @returns Manifest object or null if not found
+ */
+function readExistingManifest(projectRoot) {
+    try {
+        const manifestPath = (0,external_path_.join)(projectRoot, 'manifest.json');
+        if (!(0,external_fs_.existsSync)(manifestPath)) {
+            return null;
+        }
+        const content = (0,external_fs_.readFileSync)(manifestPath, 'utf-8');
+        return JSON.parse(content);
+    }
+    catch (error) {
+        // If we can't read or parse, treat as no existing manifest
+        return null;
+    }
+}
+/**
+ * Write manifest to project root
+ *
+ * @param manifest - Manifest object to write
+ * @param projectRoot - Project root directory
+ * @param verbose - Enable verbose logging
+ */
+function writeManifest(manifest, projectRoot, verbose = false) {
+    const manifestPath = (0,external_path_.join)(projectRoot, 'manifest.json');
+    const content = JSON.stringify(manifest, null, 2) + '\n';
+    (0,external_fs_.writeFileSync)(manifestPath, content, 'utf-8');
+    if (verbose) {
+        console.log(`✅ CryptoGuard manifest written to ${manifestPath}`);
+    }
+}
+/**
+ * Write manifest only if it has changed
+ *
+ * @param manifest - Manifest object to write
+ * @param projectRoot - Project root directory
+ * @param verbose - Enable verbose logging
+ * @returns true if manifest was written, false if unchanged
+ */
+function writeManifestIfChanged(manifest, projectRoot, verbose = false) {
+    const existingManifest = readExistingManifest(projectRoot);
+    // If no existing manifest, write it
+    if (!existingManifest) {
+        writeManifest(manifest, projectRoot, verbose);
+        console.log('✨ CryptoGuard manifest generated');
+        return true;
+    }
+    // If manifest has changed, update it
+    if (!deepEqual(existingManifest, manifest)) {
+        writeManifest(manifest, projectRoot, verbose);
+        console.log('✨ CryptoGuard manifest updated');
+        return true;
+    }
+    // No changes needed
+    if (verbose) {
+        console.log('✓ CryptoGuard manifest is up to date');
+    }
+    return false;
+}
+//# sourceMappingURL=utils.js.map
+;// CONCATENATED MODULE: ../manifest-generator/core/dist/index.js
+/**
+ * @cmdoss/cryptoguard-manifest-core
+ *
+ * Core types, validation, and utilities for CryptoGuard manifest generation
+ * Shared across all framework-specific manifest generator plugins
+ */
+
+// Export validation
+
+// Export utilities
 
 //# sourceMappingURL=index.js.map
 
