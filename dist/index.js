@@ -98310,8 +98310,8 @@ function parseInputs() {
     if (!inputs.privateKey) {
         throw new Error('PRIVATE_KEY environment variable is required (ED25519_PRIVATE_KEY also supported for backwards compatibility)');
     }
-    // Validate domain format
-    const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$/;
+    // Validate domain format (supports subdomains and hyphens)
+    const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
     if (!domainRegex.test(inputs.domain)) {
         throw new Error(`Invalid domain format: ${inputs.domain}`);
     }
