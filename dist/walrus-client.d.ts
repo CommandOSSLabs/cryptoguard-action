@@ -6,6 +6,9 @@ export interface WalrusClientConfig {
     aggregatorUrl?: string;
     timeout?: number;
     maxRetries?: number;
+    network?: 'mainnet' | 'testnet';
+    privateKey?: string;
+    suiRpcUrl?: string;
 }
 /**
  * Result of a Walrus blob upload
@@ -54,20 +57,34 @@ export interface TwoQuiltDeployment {
 /**
  * Client for interacting with Walrus decentralized storage
  * Handles file uploads and blob verification with quilt support
+ *
+ * Uses @mysten/walrus SDK for actual uploads with payment signer
  */
 export declare class WalrusClient {
     private readonly publisherUrl;
     private readonly aggregatorUrl;
     private readonly timeout;
     private readonly maxRetries;
+    private readonly network;
+    private readonly walrusSdk;
+    private readonly signer;
     constructor(config: WalrusClientConfig);
     /**
      * Upload a file to Walrus storage
+     * Uses SDK with payment signer if available, otherwise falls back to HTTP
      * @param fileContent - File content as Buffer or string
      * @param fileName - Optional file name for logging
      * @returns Blob information including blob ID
      */
     uploadBlob(fileContent: Buffer | string, fileName?: string): Promise<WalrusBlobInfo>;
+    /**
+     * Upload blob using @mysten/walrus SDK with payment signer
+     */
+    private uploadBlobWithSdk;
+    /**
+     * Upload blob using HTTP PUT (legacy method, may not work on public publishers)
+     */
+    private uploadBlobWithHttp;
     /**
      * Upload multiple blobs in parallel
      * @param files - Map of file path to file content
