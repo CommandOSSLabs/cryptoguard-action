@@ -70,6 +70,11 @@ export declare class WalrusClient {
     private readonly signer;
     constructor(config: WalrusClientConfig);
     /**
+     * Parse private key from various formats
+     * Supports: hex string (with or without 0x prefix), suiprivkey (Bech32)
+     */
+    private parsePrivateKey;
+    /**
      * Upload a file to Walrus storage
      * Uses SDK with payment signer if available, otherwise falls back to HTTP
      * @param fileContent - File content as Buffer or string
