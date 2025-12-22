@@ -173,13 +173,11 @@ export declare class CryptoGuardSuiClient {
      *
      * @param privateKey - Owner's private key for transaction signing
      * @param siteRecordId - Sui object ID of the site record
-     * @param deploymentData - Deployment data including quilt IDs and metadata
+     * @param deploymentData - Deployment data including quilt blob ID and metadata
      * @returns Transaction result
      */
     updateSiteDirect(privateKey: string, siteRecordId: string, deploymentData: {
-        content_quilt_id: string;
-        metadata_quilt_id: string;
-        provenance_blob_id: string;
+        quilt_blob_id: string;
         files_manifest_hash: string;
         total_files: number;
         total_size_bytes: number;

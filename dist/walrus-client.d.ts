@@ -27,32 +27,49 @@ export declare class WalrusError extends Error {
     constructor(message: string, code: string, details?: any | undefined);
 }
 /**
- * Quilt structure for organizing related blobs
+ * Quilt structure containing attestation + manifest
+ * This is the ONLY blob uploaded to Walrus - contains 2 files:
+ * 1. attestation.json - Sigstore attestation with files_manifest (all file hashes)
+ * 2. manifest.json - Framework routing info for SSR path mappings
  */
-export interface QuiltManifest {
+export interface CryptoGuardQuilt {
     version: string;
-    files: Array<{
-        path: string;
-        blobId: string;
-        size: number;
-        contentType: string;
-    }>;
-    metadata?: Record<string, any>;
+    attestation: {
+        sigstore_bundle: any;
+        files_manifest: {
+            files: Array<{
+                path: string;
+                content_hash: string;
+                size_bytes: number;
+            }>;
+            total_files: number;
+            total_size_bytes: number;
+        };
+        slsa_provenance: any;
+        github_context: any;
+    };
+    manifest: {
+        version: string;
+        framework: string;
+        frameworkVersion: string;
+        sources: Array<{
+            dir: string;
+            serveAt: string;
+        }>;
+    };
+    metadata: {
+        domain: string;
+        created_at: string;
+        deployment_type: string;
+    };
 }
 /**
- * Two-quilt deployment structure
+ * Quilt deployment result
  */
-export interface TwoQuiltDeployment {
-    contentQuilt: {
-        blobId: string;
-        manifest: QuiltManifest;
-        totalSize: number;
-    };
-    metadataQuilt: {
-        blobId: string;
-        manifest: QuiltManifest;
-        totalSize: number;
-    };
+export interface QuiltDeployment {
+    blobId: string;
+    quilt: CryptoGuardQuilt;
+    totalSize: number;
 }
 /**
  * Client for interacting with Walrus decentralized storage
@@ -104,16 +121,47 @@ export declare class WalrusClient {
      */
     verifyBlob(blobId: string): Promise<boolean>;
     /**
-     * Upload files using two-quilt structure (content + metadata)
-     * This matches the structure used by the verification server
+     * Upload a single quilt containing attestation + manifest
      *
-     * @param files - Map of file path to file content
-     * @param provenance - Provenance data
-     * @param manifest - CryptoGuard manifest data (framework routing info)
-     * @param metadata - Additional metadata
-     * @returns Two-quilt deployment structure
+     * CORRECT ARCHITECTURE:
+     * - Single quilt blob uploaded to Walrus
+     * - Contains 2 logical files: attestation.json + manifest.json
+     * - attestation.json contains files_manifest with all SHA256 hashes
+     * - manifest.json contains framework routing info for SSR sites
+     * - NO individual file blobs are uploaded (hashes only, not content)
+     *
+     * @param filesManifest - Files manifest with hashes (from file scanning)
+     * @param attestation - Sigstore attestation data
+     * @param manifest - CryptoGuard manifest (framework routing info)
+     * @param domain - Domain being deployed
+     * @returns Quilt deployment result with single blob_id
      */
-    uploadTwoQuiltStructure(files: Record<string, Buffer>, provenance: any, manifest: any, metadata?: Record<string, any>): Promise<TwoQuiltDeployment>;
+    uploadQuilt(filesManifest: {
+        files: Array<{
+            path: string;
+            content_hash: string;
+            size_bytes: number;
+        }>;
+        total_files: number;
+        total_size_bytes: number;
+    }, attestation: {
+        sigstore_bundle?: any;
+        slsa_provenance: any;
+        attested_provenance?: any;
+        github_context: any;
+    }, manifest: {
+        version: string;
+        framework: string;
+        frameworkVersion: string;
+        sources: Array<{
+            dir: string;
+            serveAt: string;
+        }>;
+    }, domain: string): Promise<QuiltDeployment>;
+    /**
+     * @deprecated Use uploadQuilt instead - this method uploaded individual files which is wrong
+     */
+    uploadTwoQuiltStructure(_files: Record<string, Buffer>, provenance: any, manifest: any, metadata?: Record<string, any>): Promise<any>;
     /**
      * Get content type from file extension
      */
