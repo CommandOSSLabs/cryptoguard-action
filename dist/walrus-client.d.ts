@@ -159,14 +159,6 @@ export declare class WalrusClient {
         }>;
     }, domain: string): Promise<QuiltDeployment>;
     /**
-     * @deprecated Use uploadQuilt instead - this method uploaded individual files which is wrong
-     */
-    uploadTwoQuiltStructure(_files: Record<string, Buffer>, provenance: any, manifest: any, metadata?: Record<string, any>): Promise<any>;
-    /**
-     * Get content type from file extension
-     */
-    private getContentType;
-    /**
      * Sleep for specified milliseconds
      */
     private sleep;
