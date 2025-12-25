@@ -1,0 +1,118 @@
+# CryptoGuard Build Workflow
+# Reusable workflow that builds your app and generates file hashes for SLSA provenance
+#
+# NOTE: Due to GitHub Actions security requirements, the SLSA provenance generator
+# must be called directly from your workflow (not nested). Use this workflow
+# with the SLSA generator following the example in README.md
+#
+# This workflow handles:
+# - Building your application
+# - Computing file hashes (for SLSA provenance subjects)
+# - Uploading build artifacts
+#
+# Usage: See README.md for complete 3-job example
+
+name: CryptoGuard Build
+
+on:
+  workflow_call:
+    inputs:
+      build-command:
+        description: "Build command (e.g., 'pnpm build', 'npm run build')"
+        required: true
+        type: string
+      build-dir:
+        description: "Build output directory (e.g., '.next', 'dist', 'build')"
+        required: true
+        type: string
+      manifest-path:
+        description: "Path to manifest.json (default: ./manifest.json)"
+        required: false
+        type: string
+        default: "./manifest.json"
+      node-version:
+        description: "Node.js version"
+        required: false
+        type: string
+        default: "20"
+      package-manager:
+        description: "Package manager (pnpm, npm, yarn)"
+        required: false
+        type: string
+        default: "pnpm"
+    outputs:
+      hashes:
+        description: "Base64-encoded file hashes for SLSA provenance"
+        value: ${{ jobs.build.outputs.hashes }}
+      artifact-name:
+        description: "Name of the build artifact"
+        value: ${{ jobs.build.outputs.artifact-name }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+      artifact-name: build-output
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Setup package manager
+      - name: Setup pnpm
+        if: inputs.package-manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.package-manager }}
+
+      # Install dependencies
+      - name: Install dependencies (pnpm)
+        if: inputs.package-manager == 'pnpm'
+        run: pnpm install
+
+      - name: Install dependencies (npm)
+        if: inputs.package-manager == 'npm'
+        run: npm ci
+
+      - name: Install dependencies (yarn)
+        if: inputs.package-manager == 'yarn'
+        run: yarn install --frozen-lockfile
+
+      # Build
+      - name: Build
+        run: ${{ inputs.build-command }}
+
+      # Copy manifest to build directory
+      - name: Copy manifest to build directory
+        run: |
+          if [ -f "${{ inputs.manifest-path }}" ]; then
+            cp "${{ inputs.manifest-path }}" "${{ inputs.build-dir }}/manifest.json"
+            echo "Copied manifest.json to build directory"
+          else
+            echo "Warning: manifest.json not found at ${{ inputs.manifest-path }}"
+          fi
+
+      # Generate hashes for SLSA provenance
+      - name: Generate file hashes
+        id: hash
+        run: |
+          # Find all files in build directory and compute SHA256 hashes
+          # Format: sha256sum output, base64 encoded for passing between jobs
+          cd "${{ inputs.build-dir }}"
+          HASHES=$(find . -type f -exec sha256sum {} \; | base64 -w0)
+          echo "hashes=$HASHES" >> "$GITHUB_OUTPUT"
+          echo "Generated hashes for $(find . -type f | wc -l) files"
+
+      # Upload build artifacts
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: ${{ inputs.build-dir }}/
+          retention-days: 1

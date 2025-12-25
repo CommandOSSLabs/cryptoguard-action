@@ -1,0 +1,97 @@
+# CryptoGuard Deploy Workflow
+# Reusable workflow that deploys to Walrus and updates Sui blockchain
+#
+# This workflow handles:
+# - Downloading SLSA provenance and build artifacts
+# - Uploading quilt (provenance + manifest) to Walrus
+# - Updating domain on Sui blockchain
+#
+# Usage: See README.md for complete 3-job example
+
+name: CryptoGuard Deploy
+
+on:
+  workflow_call:
+    inputs:
+      provenance-name:
+        description: "Name of the provenance artifact from SLSA generator"
+        required: true
+        type: string
+      build-artifact-name:
+        description: "Name of the build artifact"
+        required: false
+        type: string
+        default: "build-output"
+      network:
+        description: "Sui network (testnet, mainnet)"
+        required: false
+        type: string
+        default: "testnet"
+    secrets:
+      DOMAIN:
+        description: "Domain registered on CryptoGuard"
+        required: true
+      PRIVATE_KEY:
+        description: "Ed25519 private key for signing"
+        required: true
+    outputs:
+      quilt-blob-id:
+        description: "Walrus blob ID of the quilt"
+        value: ${{ jobs.deploy.outputs.quilt-blob-id }}
+      tx-digest:
+        description: "Sui transaction digest"
+        value: ${{ jobs.deploy.outputs.tx-digest }}
+      version:
+        description: "New site version on blockchain"
+        value: ${{ jobs.deploy.outputs.version }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      quilt-blob-id: ${{ steps.deploy.outputs.quilt-blob-id }}
+      tx-digest: ${{ steps.deploy.outputs.tx-digest }}
+      version: ${{ steps.deploy.outputs.version }}
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      # Download provenance artifact from SLSA generator
+      - name: Download provenance
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.provenance-name }}
+          path: ./provenance/
+
+      # Download build artifacts
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.build-artifact-name }}
+          path: ./build/
+
+      # Find the provenance file (*.intoto.jsonl)
+      - name: Locate provenance file
+        id: find-provenance
+        run: |
+          PROVENANCE_FILE=$(find ./provenance -name "*.intoto.jsonl" -o -name "*.intoto" | head -1)
+          if [ -z "$PROVENANCE_FILE" ]; then
+            echo "Error: No provenance file found"
+            ls -la ./provenance/
+            exit 1
+          fi
+          echo "provenance-file=$PROVENANCE_FILE" >> "$GITHUB_OUTPUT"
+          echo "Found provenance: $PROVENANCE_FILE"
+
+      # Run CryptoGuard action
+      - name: CryptoGuard Deploy
+        id: deploy
+        uses: CommandOSSLabs/cryptoguard-action@v1
+        with:
+          domain: ${{ secrets.DOMAIN }}
+          provenance-file: ${{ steps.find-provenance.outputs.provenance-file }}
+          manifest-file: ./build/manifest.json
+          network: ${{ inputs.network }}
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
