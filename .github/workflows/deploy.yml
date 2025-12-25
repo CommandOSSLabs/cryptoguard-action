@@ -59,15 +59,14 @@ jobs:
     steps:
       # Download provenance artifact from SLSA generator
       - name: Download provenance
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.provenance-name }}
           path: ./provenance/
 
       # Download build artifacts
-      # Using v3 for cross-workflow artifact sharing
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.build-artifact-name }}
           path: ./build/

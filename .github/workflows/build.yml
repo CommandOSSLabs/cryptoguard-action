@@ -115,9 +115,8 @@ jobs:
         run: echo "name=build-output" >> "$GITHUB_OUTPUT"
 
       # Upload build artifacts
-      # Using v3 for cross-workflow artifact sharing
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-output
           path: ${{ inputs.build-dir }}/
