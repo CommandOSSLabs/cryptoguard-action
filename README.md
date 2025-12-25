@@ -1,22 +1,20 @@
-# @cryptoguard/action
+# CryptoGuard Action
 
-GitHub Action for CryptoGuard V1.0 deployment with GitHub OIDC and Sigstore attestation.
+GitHub Action for SLSA Level 3 deployment with cryptographic verification on Sui blockchain and Walrus storage.
 
-## Overview
+## Features
 
-This GitHub Action implements the CryptoGuard V1.0 workflow, providing cryptographically verified deployment with:
+- **SLSA Level 3 Provenance**: Real supply chain security from isolated VM
+- **Walrus Storage**: Decentralized storage for attestations
+- **Sui Blockchain**: On-chain domain registry with trustless updates
+- **Sigstore Integration**: Cryptographic signatures with transparency log
 
-- **GitHub OIDC Authentication**: Using GitHub Actions OIDC tokens for identity verification
-- **Sigstore Attestation**: All operations attested using Cosign and Sigstore transparency log
-- **File-Level Integrity**: Comprehensive SHA256 manifest generation with individual file verification
-- **SLSA Level 3 Provenance**: GitHub OIDC-signed with Sigstore transparency for supply chain security
-- **Walrus Storage Integration**: Decentralized storage on Sui network with cryptographic verification
-- **Sui Blockchain Registry**: On-chain domain registry with atomic updates and version control
+## Quick Start (Recommended)
 
-## Usage
+Use the reusable workflow for the simplest integration:
 
 ```yaml
-name: CryptoGuard V1.0 GitHub OIDC Deploy
+name: CryptoGuard Deploy
 
 on:
   push:
@@ -24,192 +22,199 @@ on:
 
 jobs:
   deploy:
+    uses: CommandOSSLabs/cryptoguard-action/.github/workflows/deploy-slsa3.yml@v1
+    with:
+      domain: "example.com"
+      build-command: "pnpm build"
+      build-dir: ".next"
+    secrets:
+      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+```
+
+This single workflow call handles:
+1. Building your application
+2. Generating SLSA Level 3 provenance (in isolated VM)
+3. Uploading to Walrus
+4. Updating Sui blockchain
+
+### Workflow Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `domain` | Domain registered on CryptoGuard | Yes | |
+| `build-command` | Build command (e.g., `pnpm build`) | Yes | |
+| `build-dir` | Build output directory (e.g., `.next`) | Yes | |
+| `manifest-path` | Path to manifest.json | No | `./manifest.json` |
+| `node-version` | Node.js version | No | `20` |
+| `package-manager` | Package manager (pnpm/npm/yarn) | No | `pnpm` |
+| `network` | Sui network (testnet/mainnet) | No | `testnet` |
+
+### Workflow Outputs
+
+| Output | Description |
+|--------|-------------|
+| `build-artifact-name` | Name of build artifact (for downstream jobs) |
+| `provenance-artifact-name` | Name of provenance artifact |
+| `quilt-blob-id` | Walrus blob ID |
+| `sui-tx-digest` | Sui transaction digest |
+| `site-version` | New site version |
+
+### Chaining with Other Deployments
+
+You can use the build artifacts in subsequent jobs:
+
+```yaml
+jobs:
+  cryptoguard:
+    uses: CommandOSSLabs/cryptoguard-action/.github/workflows/deploy-slsa3.yml@v1
+    with:
+      domain: "example.com"
+      build-command: "pnpm build"
+      build-dir: ".next"
+    secrets:
+      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+
+  deploy-vercel:
+    needs: [cryptoguard]
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write # Required for GitHub OIDC token
-      contents: read
-      actions: read
-      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.cryptoguard.outputs.build-artifact-name }}
+      - uses: amondnet/vercel-action@v25
+        # ... your Vercel config
+```
+
+## Direct Action Usage (Advanced)
+
+If you need more control, use the action directly with your own SLSA generator setup:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
     steps:
       - uses: actions/checkout@v4
-
-      # Build your application
-      - name: Build
-        run: npm run build
-
-      # CryptoGuard V1.0 GitHub OIDC Deployment
-      - name: CryptoGuard Deploy
-        uses: CommandOSSLabs/cryptoguard-action@v0.1.1
+      - run: pnpm install && pnpm build
+      - id: hash
+        run: echo "hashes=$(find .next -type f -exec sha256sum {} \; | base64 -w0)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
         with:
-          domain: example.com
-          build-dir: ./build
-          # build-dir: ./dist
-          network: testnet # or mainnet for production
+          name: build-output
+          path: .next/
+
+  provenance:
+    needs: [build]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
+
+  deploy:
+    needs: [build, provenance]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.provenance.outputs.provenance-name }}
+          path: ./provenance/
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: ./build/
+      - uses: CommandOSSLabs/cryptoguard-action@v1
+        with:
+          domain: "example.com"
+          provenance-file: ./provenance/*.intoto.jsonl
+          manifest-file: ./build/manifest.json
+          network: testnet
         env:
-          # Domain verification hash from CLI registration
-          CRYPTOGUARD_DOMAIN_HASH: ${{ secrets.CRYPTOGUARD_DOMAIN_HASH }}
-          # Private key for signature authentication (supports multiple formats)
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
 ```
 
+### Action Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `domain` | Domain registered on CryptoGuard | Yes | |
+| `provenance-file` | Path to SLSA provenance file | Yes | |
+| `manifest-file` | Path to manifest.json | Yes | |
+| `network` | Sui network (testnet/mainnet) | No | `testnet` |
+| `sui-rpc-url` | Custom Sui RPC URL | No | Auto |
+| `walrus-publisher-url` | Custom Walrus publisher URL | No | Auto |
+| `gas-budget` | Gas budget in MIST | No | `10000000` |
+| `debug` | Enable debug logging | No | `false` |
+
+### Action Outputs
+
+| Output | Description |
+|--------|-------------|
+| `quilt-blob-id` | Walrus blob ID of uploaded quilt |
+| `tx-digest` | Sui transaction digest |
+| `version` | New site version on blockchain |
+| `site-record-id` | Sui SiteRecord object ID |
+
 ## Prerequisites
 
-Before using this action, you must:
-
 1. **Register your domain** using the CryptoGuard CLI:
-
    ```bash
+   npm install -g @cryptoguard/cli
    cryptoguard register example.com
    ```
 
-   This generates the required `CRYPTOGUARD_DOMAIN_HASH` and private key.
-
 2. **Add secrets** to your GitHub repository:
-   - `CRYPTOGUARD_DOMAIN_HASH`: Domain verification hash from CLI registration
-   - `PRIVATE_KEY`: Private key for signature authentication (supports hex, base64, base58, and Sui formats)
+   - `PRIVATE_KEY`: Ed25519 private key (64-char hex)
 
-## Inputs
+## How It Works
 
-| Input          | Description                                  | Required | Default               |
-| -------------- | -------------------------------------------- | -------- | --------------------- |
-| `domain`       | Domain name for deployment verification      | Yes      |                       |
-| `build-dir`    | Directory containing built application files | Yes      | `./dist`              |
-| `network`      | Sui/Walrus network (testnet/mainnet)         | No       | `testnet`             |
-| `github-token` | GitHub token for API access (auto-provided)  | No       | `${{ github.token }}` |
+### SLSA Level 3 Architecture
 
-## Environment Variables
-
-| Variable                  | Description                                                          | Required |
-| ------------------------- | -------------------------------------------------------------------- | -------- |
-| `CRYPTOGUARD_DOMAIN_HASH` | Domain verification hash from CLI registration                       | Yes      |
-| `PRIVATE_KEY`             | Private key for signature authentication (supports multiple formats) | Yes      |
-| `ED25519_PRIVATE_KEY`     | Legacy private key variable (backward compatibility)                 | No       |
-| `GITHUB_TOKEN`            | GitHub token for API access (optional)                               | No       |
-
-### Private Key Format Support
-
-The action supports multiple private key formats for maximum compatibility:
-
-- **Hex format**: `0x1234567890abcdef...` (64-character hex string)
-- **Base64 format**: Standard base64 encoded private keys
-- **Base58 format**: Bitcoin-style base58 encoded keys
-- **Sui format**: `suiprivkey1...` (Sui wallet private key format)
-
-The action automatically detects and normalizes the key format. For backward compatibility, both `PRIVATE_KEY` and `ED25519_PRIVATE_KEY` environment variables are supported.
-
-## Outputs
-
-| Output               | Description                                                |
-| -------------------- | ---------------------------------------------------------- |
-| `success`            | Whether deployment completed successfully (`true`/`false`) |
-| `github_attestation` | GitHub OIDC attestation hash for verification              |
-| `registry_version`   | New version number in Sui registry                         |
-| `provenance_blob_id` | Walrus blob ID for SLSA provenance                         |
-
-## Workflow Steps
-
-The action executes the following V1.0 workflow steps:
-
-1. **GitHub OIDC Authentication and Domain Verification**: Verify domain ownership using GitHub OIDC tokens
-2. **File-Level Integrity Manifest Generation**: Create comprehensive SHA256 hashes for all files
-3. **Sigstore-Attested SLSA Provenance Generation**: Generate Level 3 SLSA provenance with Cosign attestation
-4. **Walrus Storage Integration**: Upload files to decentralized Walrus storage with cryptographic verification
-5. **Atomic Sui Registry Updates**: Update on-chain domain registry with atomic transactions
-6. **GitHub Integration**: Create deployment status and check runs
-
-## Security Features
-
-### Hardware Trust Boundary
-
-All critical operations performed within Nautilus TEE with cryptographic attestation.
-
-### File-Level Verification
-
-Each file gets individual SHA256 hash for granular integrity checking.
-
-### Atomic Transactions
-
-Registry updates with consistency guarantees and automatic rollback.
-
-### Permanent Audit Trail
-
-Complete verification history stored immutably on blockchain and Walrus.
-
-## Browser Extension Integration
-
-After deployment, users with the CryptoGuard browser extension will see **🛡️ VERIFIED** status with:
-
-- Domain verification confirmation
-- File-level integrity checking
-- Hardware attestation validation
-- Real-time provenance verification
-
-## Error Handling
-
-The action provides comprehensive error handling for:
-
-- Invalid domain formats
-- Missing authentication credentials
-- TEE connectivity issues
-- File processing errors
-- Walrus upload failures
-- Registry update conflicts
-
-## Performance
-
-- **Scalable**: Supports up to 10,000 files with parallel processing
-- **Efficient**: Optimized file hashing with concurrent operations
-- **Reliable**: Multi-region TEE failover and retry logic
-- **Fast**: Typical deployment completes in 2-5 minutes
-
-## Development
-
-### Building
-
-```bash
-npm install
-npm run build
+```
+┌─────────────┐     hashes      ┌──────────────────┐
+│   Build     │ ──────────────▶ │   Provenance     │
+│  (Your VM)  │                 │  (Isolated VM)   │
+└─────────────┘                 │  SLSA Generator  │
+                                └────────┬─────────┘
+                                         │
+                                         │ signed provenance
+                                         ▼
+                                ┌──────────────────┐
+                                │     Deploy       │
+                                │  (Your VM)       │
+                                │                  │
+                                │  ┌────────────┐  │
+                                │  │ CryptoGuard│  │
+                                │  │   Action   │  │
+                                │  └─────┬──────┘  │
+                                └────────┼─────────┘
+                                         │
+                          ┌──────────────┴──────────────┐
+                          ▼                              ▼
+                    ┌──────────┐                  ┌──────────┐
+                    │  Walrus  │                  │   Sui    │
+                    │ Storage  │                  │Blockchain│
+                    └──────────┘                  └──────────┘
 ```
 
-### Testing
+**Why Level 3?**
+- Provenance generated in **isolated VM** (user cannot tamper)
+- Signed by **Sigstore** with GitHub OIDC
+- Recorded in **Rekor transparency log**
+- **Non-forgeable** attestation
 
-```bash
-# Run unit tests
-npm test
+## Security
 
-# Run integration tests
-npm run test:integration
-
-# Run end-to-end tests
-npm run test:e2e
-
-# Coverage report
-npm run test:coverage
-```
-
-### Local Development
-
-```bash
-# Watch mode for development
-npm run dev
-
-# Type checking
-npm run check-types
-
-# Linting
-npm run lint
-npm run lint:fix
-```
+- **Domain Verification**: Ownership verified on Sui blockchain
+- **SLSA Level 3**: Provenance from isolated, hardened infrastructure
+- **Sigstore Signatures**: Cryptographic proof of build origin
+- **Transparency Log**: Public, immutable audit trail
+- **Trustless Updates**: User signs all blockchain transactions
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Support
-
-For issues and questions:
-
-- GitHub Issues: [cryptoguard/cryptoguard](https://github.com/cryptoguard/cryptoguard/issues)
-- Documentation: [docs.cryptoguard.dev](https://docs.cryptoguard.dev)
-- Security: security@cryptoguard.dev
-
+MIT License
