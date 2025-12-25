@@ -110,8 +110,9 @@ jobs:
           echo "Generated hashes for $(find . -type f | wc -l) files"
 
       # Upload build artifacts
+      # Using v3 for cross-workflow artifact sharing
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: build-output
           path: ${{ inputs.build-dir }}/
