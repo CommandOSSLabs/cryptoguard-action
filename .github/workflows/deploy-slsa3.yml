@@ -134,9 +134,10 @@ jobs:
           echo "hashes=$HASHES" >> "$GITHUB_OUTPUT"
           echo "Generated hashes for $(find . -type f | wc -l) files"
 
-      # Upload build artifacts (for downstream jobs and SLSA generator)
+      # Upload build artifacts (for downstream jobs)
+      # Using v3 for better cross-workflow compatibility
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: build-output
           path: ${{ inputs.build-dir }}/
@@ -178,14 +179,14 @@ jobs:
       # Download provenance artifact from Job 2
       # The SLSA generator uploads provenance with artifact name = provenance-name output
       - name: Download provenance
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: ${{ needs.provenance.outputs.provenance-name }}
           path: ./provenance/
 
       # Download build artifacts (only need manifest.json)
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: build-output
           path: ./build/
