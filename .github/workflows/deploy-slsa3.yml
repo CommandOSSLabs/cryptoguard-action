@@ -6,10 +6,10 @@
 #     deploy:
 #       uses: CommandOSSLabs/cryptoguard-action/.github/workflows/deploy-slsa3.yml@v1
 #       with:
-#         domain: ${{ secrets.DOMAIN }}
 #         build-command: "pnpm build"
 #         build-dir: ".next"
 #       secrets:
+#         DOMAIN: ${{ secrets.DOMAIN }}
 #         PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
 
 name: CryptoGuard SLSA Level 3 Deploy
@@ -17,10 +17,6 @@ name: CryptoGuard SLSA Level 3 Deploy
 on:
   workflow_call:
     inputs:
-      domain:
-        description: "Domain registered on CryptoGuard"
-        required: true
-        type: string
       build-command:
         description: "Build command (e.g., 'pnpm build', 'npm run build')"
         required: true
@@ -50,6 +46,9 @@ on:
         type: string
         default: "testnet"
     secrets:
+      DOMAIN:
+        description: "Domain registered on CryptoGuard"
+        required: true
       PRIVATE_KEY:
         description: "Ed25519 private key for signing"
         required: true
@@ -209,7 +208,7 @@ jobs:
         id: deploy
         uses: CommandOSSLabs/cryptoguard-action@v1
         with:
-          domain: ${{ inputs.domain }}
+          domain: ${{ secrets.DOMAIN }}
           provenance-file: ${{ steps.find-provenance.outputs.provenance-file }}
           manifest-file: ./build/manifest.json
           network: ${{ inputs.network }}
