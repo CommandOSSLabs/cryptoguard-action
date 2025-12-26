@@ -88,6 +88,26 @@ jobs:
       - name: Build
         run: ${{ inputs.build-command }}
 
+      # Debug: Show build output
+      - name: Debug - List build output
+        run: |
+          echo "=== Checking build directory: ${{ inputs.build-dir }} ==="
+          if [ -d "${{ inputs.build-dir }}" ]; then
+            echo "Directory exists. Contents:"
+            ls -la "${{ inputs.build-dir }}/"
+            echo "Total files:"
+            find "${{ inputs.build-dir }}" -type f | wc -l
+          else
+            echo "ERROR: Build directory does not exist!"
+            echo "=== Current directory contents ==="
+            ls -la
+            echo "=== Looking for common build outputs ==="
+            ls -la .next/ 2>/dev/null || echo ".next/ not found"
+            ls -la dist/ 2>/dev/null || echo "dist/ not found"
+            ls -la build/ 2>/dev/null || echo "build/ not found"
+            ls -la out/ 2>/dev/null || echo "out/ not found"
+          fi
+
       # Copy manifest to build directory
       - name: Copy manifest to build directory
         run: |
