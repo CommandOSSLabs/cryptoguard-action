@@ -114,10 +114,21 @@ jobs:
         id: artifact
         run: echo "name=build-output" >> "$GITHUB_OUTPUT"
 
+      # Debug working directory and prepare upload
+      - name: Prepare artifact upload
+        id: prepare-upload
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Build dir input: ${{ inputs.build-dir }}"
+          FULL_PATH="${GITHUB_WORKSPACE}/${{ inputs.build-dir }}"
+          echo "Full path: $FULL_PATH"
+          echo "path=$FULL_PATH" >> "$GITHUB_OUTPUT"
+          ls -la "$FULL_PATH" | head -20
+
       # Upload build artifacts
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-output
-          path: ${{ inputs.build-dir }}
+          path: ${{ steps.prepare-upload.outputs.path }}
           retention-days: 1
