@@ -64,12 +64,18 @@ jobs:
           name: ${{ inputs.provenance-name }}
           path: ./provenance/
 
-      # Download build artifacts
+      # Download build artifacts using GitHub CLI for cross-workflow compatibility
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.build-artifact-name }}
-          path: ./build/
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Downloading artifact: ${{ inputs.build-artifact-name }}"
+          gh run download ${{ github.run_id }} \
+            --name "${{ inputs.build-artifact-name }}" \
+            --dir ./build/ \
+            --repo ${{ github.repository }}
+          echo "Downloaded build artifacts:"
+          ls -la ./build/
 
       # Find the provenance file (*.intoto.jsonl)
       - name: Locate provenance file
