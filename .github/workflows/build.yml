@@ -132,3 +132,4 @@ jobs:
           name: build-output
           path: ${{ steps.prepare-upload.outputs.path }}
           retention-days: 1
+          include-hidden-files: true
