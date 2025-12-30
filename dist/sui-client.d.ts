@@ -32,8 +32,8 @@ export interface TransactionResult {
  */
 export declare class SuiError extends Error {
     code: string;
-    details?: any | undefined;
-    constructor(message: string, code: string, details?: any | undefined);
+    details?: unknown | undefined;
+    constructor(message: string, code: string, details?: unknown | undefined);
 }
 /**
  * Client for interacting with Sui blockchain
@@ -58,7 +58,7 @@ export declare class CryptoGuardSuiClient {
     lookupDomain(domain: string): Promise<DomainRecord | null>;
     /**
      * Parse private key from various formats
-     * Supports: hex string (with or without 0x prefix), base64, suiprivkey format
+     * Uses shared parsePrivateKeyToKeypair from crypto-utils
      */
     private parsePrivateKey;
     /**

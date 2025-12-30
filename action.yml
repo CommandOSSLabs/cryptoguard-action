@@ -1,49 +1,53 @@
 name: 'CryptoGuard Action'
-description: 'SLSA Level 3 deployment action - receives provenance from isolated VM, uploads to Walrus, updates Sui blockchain'
+description: 'SLSA Level 3 deployment action with blockchain verification'
 author: 'CryptoGuard'
 branding:
   icon: 'shield'
   color: 'blue'
 
 inputs:
+  # Required inputs
   domain:
-    description: 'Domain registered on CryptoGuard'
+    description: 'Registered domain name for deployment'
     required: true
   provenance-file:
     description: 'Path to SLSA provenance file from slsa-github-generator'
     required: true
   manifest-file:
-    description: 'Path to manifest.json (framework routing)'
+    description: 'Path to manifest.json file (framework routing info)'
     required: true
+
+  # Network configuration
   network:
-    description: 'Sui network (testnet/mainnet)'
+    description: 'Sui/Walrus network (testnet/mainnet)'
     required: false
     default: 'testnet'
+
+  # Optional overrides (auto-detected from network)
   sui-rpc-url:
-    description: 'Custom Sui RPC URL (optional)'
+    description: 'Sui RPC endpoint URL (auto-detected from network)'
     required: false
+    default: ''
   walrus-publisher-url:
-    description: 'Custom Walrus publisher URL (optional)'
+    description: 'Walrus publisher endpoint URL (auto-detected from network)'
     required: false
+    default: ''
   walrus-aggregator-url:
-    description: 'Custom Walrus aggregator URL (optional)'
+    description: 'Walrus aggregator endpoint URL (auto-detected from network)'
     required: false
+    default: ''
   gas-budget:
-    description: 'Gas budget for Sui transaction (in MIST)'
+    description: 'Gas budget for blockchain transaction (in MIST)'
     required: false
     default: '10000000'
-  debug:
-    description: 'Enable debug logging'
-    required: false
-    default: 'false'
 
 outputs:
   quilt-blob-id:
-    description: 'Walrus blob ID of the uploaded quilt (provenance + manifest)'
+    description: 'Walrus blob ID containing provenance + manifest'
   tx-digest:
-    description: 'Sui transaction digest'
+    description: 'Sui blockchain transaction digest'
   version:
-    description: 'New site version on blockchain'
+    description: 'New deployment version number'
   site-record-id:
     description: 'Sui SiteRecord object ID'
 

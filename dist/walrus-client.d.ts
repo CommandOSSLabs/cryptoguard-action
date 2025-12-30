@@ -88,7 +88,7 @@ export declare class WalrusClient {
     constructor(config: WalrusClientConfig);
     /**
      * Parse private key from various formats
-     * Supports: hex string (with or without 0x prefix), suiprivkey (Bech32)
+     * Uses shared parsePrivateKeyToKeypair from crypto-utils
      */
     private parsePrivateKey;
     /**

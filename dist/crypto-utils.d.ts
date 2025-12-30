@@ -4,6 +4,7 @@
  *
  * Now using shared @cryptoguard/crypto package for consistency
  */
+import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 /**
  * Sign a message with Ed25519 private key
  */
@@ -28,15 +29,14 @@ export declare function generateKeyPair(): Promise<{
  */
 export declare function calculateSHA256(data: string | Uint8Array): Promise<string>;
 /**
- * Convert hex string to Uint8Array
- * @deprecated Use shared crypto utilities instead
+ * Parse private key from various formats into Ed25519Keypair
+ * Supports: hex string (with or without 0x prefix), base64, suiprivkey (Bech32)
+ *
+ * @param privateKey - Private key in any supported format
+ * @returns Ed25519Keypair instance
+ * @throws Error if private key format is invalid
  */
-export declare function hexToBytes(hex: string): Uint8Array;
-/**
- * Convert Uint8Array to hex string
- * @deprecated Use shared crypto utilities instead
- */
-export declare function bytesToHex(bytes: Uint8Array): string;
+export declare function parsePrivateKeyToKeypair(privateKey: string): Ed25519Keypair;
 /**
  * Detect and normalize private key format to raw Ed25519 bytes (without 0x prefix)
  * Uses shared crypto package for consistent behavior
