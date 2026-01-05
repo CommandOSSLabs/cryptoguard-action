@@ -10,13 +10,21 @@ export declare const WALRUS_MAX_TIP_MIST = 10000000;
 export declare const WALRUS_DEFAULT_TIMEOUT_MS = 30000;
 /** Timeout for Walrus upload operations in milliseconds (2 minutes) */
 export declare const WALRUS_UPLOAD_TIMEOUT_MS = 120000;
-/** Testnet registry object ID */
-export declare const TESTNET_REGISTRY_ID = "0x6c335938f7bd145ec4e3bad87ca84f61dc6056157b1f93945637f75af09c635d";
-/** Testnet package ID */
-export declare const TESTNET_PACKAGE_ID = "0x3060269697cf05189ee720c877f672ea80de5152bdccabb30c5fff50f007a5d8";
-/** Mainnet registry object ID (not yet deployed) */
+/**
+ * Get network-specific configuration from environment variables
+ * Environment variables take precedence over hardcoded defaults
+ */
+export declare function getNetworkConfig(network: 'testnet' | 'mainnet'): {
+    registryId: string;
+    packageId: string;
+};
+/** @deprecated Use getNetworkConfig() instead */
+export declare const TESTNET_REGISTRY_ID = "0x612290385f4c46aa5b78bdc332d1789ddf95fe590657a9e07e9ed7ed13c0218b";
+/** @deprecated Use getNetworkConfig() instead */
+export declare const TESTNET_PACKAGE_ID = "0xbcbf04db6473ebe70009e56933e5700ae8d24b8a0fa5ad220996a4340e378c4e";
+/** @deprecated Use getNetworkConfig() instead - Mainnet not yet deployed */
 export declare const MAINNET_REGISTRY_ID = "";
-/** Mainnet package ID (not yet deployed) */
+/** @deprecated Use getNetworkConfig() instead - Mainnet not yet deployed */
 export declare const MAINNET_PACKAGE_ID = "";
 /** Sui testnet RPC URL */
 export declare const SUI_TESTNET_RPC_URL = "https://fullnode.testnet.sui.io:443";
